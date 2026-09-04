@@ -81,15 +81,14 @@ weights are **not** baked in and must be mounted (see compose files).
 
 ## Qualified behavior (evidence snapshot)
 
-Latest qualification on the live stack (decode: 2026-09-03; prefill A/B:
-2026-08-29; sustained, `openai_continuous_usage`-sourced aggregates):
+Latest `llm_decode_bench` qualification against the direct engine port
+(2026-09-04; 30 s sustained decode, `openai_continuous_usage` aggregates):
 
-- Decode: 62.9 tok/s at concurrency 1 (ITL 15.5 ms), 136.9 tok/s at
-  concurrency 4, 130.9 tok/s at concurrency 8; ctx0 single-stream ITL series
-  peaked at 75.2 tok/s.
-- 32K cold prefill: ~888 tok/s.
-- First-token logprob fingerprints verified identical across restarts
-  (mid2k/long12k/long24k).
+- Decode at concurrency 1: 64.0 tok/s ctx0, 66.4 tok/s @ 16k ctx,
+  68.3 tok/s @ 32k ctx. Single-stream ctx0 burst reached 81.1 tok/s
+  (ITL p50 34 ms) in the same-day isolated qualification.
+- Cold prefill: 1,515 tok/s @ 8K, 1,154 tok/s @ 16K, 1,500 tok/s @ 32K
+  (server-confirmed via Prometheus `kv_computed` where available).
 - LMCache L2 at export time: ~2.2 TB across ~145K objects with live
   store/lookup traffic and L1→L2 eviction flush verified in server logs.
 
