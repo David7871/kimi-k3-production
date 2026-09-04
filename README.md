@@ -2,8 +2,8 @@
 
 Production Docker Compose configuration for serving **Kimi-K3-QSRT-K2** — a 2bpw
 QSRT-quantized build of Kimi K3 (57B) — on a single 9-GPU Blackwell host with a
-320,000-token context window, remote DFlash speculative decoding, and a two-tier
-(L1 SHM + L2 disk) LMCache prefix cache.
+1,048,576-token (1M) context window, remote DFlash speculative decoding, and a
+two-tier (L1 SHM + L2 disk) LMCache prefix cache.
 
 This repository is the sanitized export of the live production directory. All
 credentials are placeholders (`CHANGE_ME`); internal host paths are kept as
@@ -18,7 +18,7 @@ your host.
   Max-Q GPUs.
 - **Draft engine**: remote DFlash draft (fixed K=3) on a 9th GPU (RTX PRO 6000
   Workstation Edition), connected over ZMQ (`tcp://127.0.0.1:8092` shipped).
-- **Quantization**: QSRT MoE expert layers with W4A8-MX prefill and W4A16
+- **Quantization**: QSRT MoE expert layers with W4A16 for both prefill and
   decode; F32/BF16/F8_E4M3 non-expert layers. Checkpoint:
   [`lukealonso/Kimi-K3-QSRT-K2`](https://huggingface.co/lukealonso/Kimi-K3-QSRT-K2)
   (~700 GB, 106 safetensors shards). QSRT codec research:
@@ -27,7 +27,8 @@ your host.
   L1 is an 80 GiB shared-memory pool; L2 is a disk-backed store on a RAID0 XFS
   volume. Chunk size 1536 tokens. L1 eviction (watermark 0.90) flushes keys to
   L2 synchronously.
-- **KV capacity**: 1.75 GiB per rank → 1,081,344-token global DCP capacity.
+- **KV capacity**: ~2.13 GiB per rank → ~2.18M-token global DCP capacity
+  (supports the full 1M-token context window with headroom).
 
 ## Container images
 
@@ -80,13 +81,20 @@ weights are **not** baked in and must be mounted (see compose files).
 
 ## Qualified behavior (evidence snapshot)
 
-From `docs/ACTIVE-PRODUCTION.md` (2026-08-30 profile):
+Latest qualification on the live stack (decode: 2026-09-03; prefill A/B:
+2026-08-29; sustained, `openai_continuous_usage`-sourced aggregates):
 
-- 8K standalone prefill: 1,765 tok/s vs 957 tok/s FlashKDA baseline (+84%).
-- Fixed-K3 steady proposal cycle: 46.99 ms / 21.28 cycles/s.
-- Decode: 49.7 tok/s with W4A16 (W4A8 decode rejected at 41.7 tok/s).
+- Decode: 62.9 tok/s at concurrency 1 (ITL 15.5 ms), 136.9 tok/s at
+  concurrency 4, 130.9 tok/s at concurrency 8; ctx0 single-stream ITL series
+  peaked at 75.2 tok/s.
+- 32K cold prefill: ~888 tok/s.
+- First-token logprob fingerprints verified identical across restarts
+  (mid2k/long12k/long24k).
 - LMCache L2 at export time: ~2.2 TB across ~145K objects with live
   store/lookup traffic and L1→L2 eviction flush verified in server logs.
+
+The earlier 320K-context profile snapshot with its qualification runs is kept
+in `docs/ACTIVE-PRODUCTION.md` (2026-08-30) for reference.
 
 ## Limitations
 
