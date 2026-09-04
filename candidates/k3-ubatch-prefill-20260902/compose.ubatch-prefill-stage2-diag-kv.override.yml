@@ -1,0 +1,11 @@
+# Diagnostic only: run stage 2 with 0.5 GiB more device headroom by
+# shrinking the KV pool (2.125 -> 1.6 GiB; max_model_len must fit) to test
+# whether the split's failures are memory exhaustion, and with the lockstep
+# switch (device drained around every hand-off) to separate stream races
+# from shared-state corruption. Not a served profile.
+services:
+  kimi-k3-production:
+    environment:
+      KV_CACHE_MEMORY_BYTES: "1717986918"
+      MAX_MODEL_LEN: "655360"
+      VLLM_K3_UBATCH_MODE_FILE: /cache/k3-ubatch-mode

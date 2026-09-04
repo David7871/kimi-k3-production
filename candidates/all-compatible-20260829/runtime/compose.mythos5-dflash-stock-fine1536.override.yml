@@ -1,0 +1,109 @@
+services:
+  lmcache-shm-preflight:
+    # Raw SHM bytes do not persist LMCache's L1 key/allocation index. Remove
+    # all unmapped arenas so the server creates a fresh 80 GiB direct-SHM pool.
+    entrypoint:
+      - python3
+      - /usr/local/bin/lmcache_shm_preflight.py
+      - --required-gib
+      - "80"
+      - --reserve-gib
+      - "4"
+
+  kimi-k3-draft:
+    # Untouched published modal-labs DFlash checkpoint, pinned directly.
+    environment:
+      # Standalone default: 32,768 tokens. Six SWA-4096 layers have an
+      # effective receptive field of 24,576, so this retains one extra layer
+      # of slack without the former 372,736-token/72-GiB experiment.
+      VLLM_K3_DRAFT_PREFIX_CACHE_TOKENS: "32768"
+    volumes:
+      - /mnt/models/Kimi-K3-DFlash-stock:/draft-model:ro
+      - /home/g0san/kimi-k3-production/overlays/vllm-live-base/vllm/entrypoints/k3_dspark_rpc.py:/opt/k3-dspark-3090/source/vllm/entrypoints/k3_dspark_rpc.py:ro
+    command:
+      - "--draft-model"
+      - "/draft-model"
+      - "--target-weights"
+      - "/target-weights"
+      - "--target-config"
+      - "/opt/k3-dspark-3090/target-config"
+      - "--method"
+      - "dflash"
+      - "--device"
+      - "0"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8091"
+      - "--num-speculative-tokens"
+      - "3"
+      - "--max-model-len"
+      - "1048576"
+      - "--max-num-batched-tokens"
+      - "1536"
+      - "--max-num-seqs"
+      - "4"
+      - "--max-retained-requests"
+      - "8"
+      - "--draft-kv-cache-gib"
+      - "8.0"
+      - "--draft-kv-window"
+      - "32768"
+      - "--enable-cuda-graph"
+      - "--cuda-graph-warmups"
+      - "2"
+      - "--proposal-address"
+      - "tcp://127.0.0.1:8092"
+
+  kimi-k3-production:
+    environment:
+      SERVED_MODEL_NAME: Kimi-K3
+      # Keep every reusable boundary on the runtime's minimum physical page.
+      MAMBA_BLOCK_SIZE: "1536"
+      PREFIX_MATCH_UNIT: "1536"
+      LMCACHE_CHUNK_SIZE: "1536"
+      # External hit alignment is derived by the served LMCache connector
+      # (lmcache.integration.vllm.lmcache_mp_connector) from the KV cache
+      # groups (validate_external_chunk_geometry / lcm of the groups'
+      # tokens-per-block); LMCACHE_EXTERNAL_HIT_ALIGN was read only by the
+      # vLLM-builtin fallback connector, which this deployment does not load.
+      MAX_NUM_BATCHED_TOKENS: "1536"
+      MAX_NUM_SCHEDULED_TOKENS: "1536"
+      VLLM_MLA_CHUNKED_PREFILL_WORKSPACE_SIZE: "1536"
+      B12X_MOE_WORKSPACE_TOKEN_LIMIT: "1536"
+      MAX_MODEL_LEN: "1048576"
+      # Vision disabled 2026-09-01 after a large Claude Code image required a
+      # 122 MiB encoder allocation with only 117 MiB externally free. Keep the
+      # text runtime on --language-model-only until image patch limits or a
+      # remote/sharded encoder are separately qualified.
+      ENABLE_VISION: "0"
+      # 2.125 GiB = 2,281,701,376 bytes. This is the smallest clean 128 MiB
+      # step with enough full-context capacity and a useful transient reserve.
+      KV_CACHE_MEMORY_BYTES: "2281701376"
+      DFLASH_K: "3"
+      SPECULATIVE_METHOD: dflash
+      DRAFT_ATTENTION_BACKEND: TRITON_ATTN
+      DRAFT_SAMPLE_METHOD: probabilistic
+      # 80 GiB L1 tier against the remounted 96 GiB /dev/shm (fstab-persisted);
+      # RAM 124 GiB fits it with swap absorbing cold pages. Name bump opens a
+      # fresh pool generation.
+      LMCACHE_SHM_NAME: kimik3_mythos5_text_dflash3_w32768_mamba1536_chunk1536_l1_80g_kv2176m_v4
+      LMCACHE_L1_INIT_GB: "80"
+      LMCACHE_L1_GB: "80"
+      # fs_native interprets GB as GiB (x2^30). Keep the text-only namespace
+      # within 2 TiB so the preserved 222/456 GiB historical namespaces and
+      # at least ~100 GiB filesystem headroom can coexist on /dev/md127.
+      LMCACHE_L2_GB: "2048"
+      # Normal thread-pool ceiling for CPU-side handlers; 7950X has 16 cores.
+      LMCACHE_MAX_CPU_WORKERS: "16"
+    volumes:
+      - /mnt/models/Kimi-K3-DFlash-stock:/draft-model:ro
+      - /mnt/lmcache-l2/kimik3/l2-mythos5-text-prob-dflash-w32768-mamba1536-chunk1536-kv2176m-v4:/lmcache/l2:rw
+    labels:
+      com.mydatacenter.served-model: Kimi-K3
+      com.mydatacenter.draft: modal-labs-kimi-k3-dflash-stock-0f0bd39d
+      com.mydatacenter.cache-geometry: physical1536-mamba1536-chunk1536-prefix1536-step1536
+      com.mydatacenter.vision: disabled
+      com.mydatacenter.draft-sampling: probabilistic-full-logits
+      com.mydatacenter.draft-window: "32768"
+      com.mydatacenter.kv-reservation: 2176MiB

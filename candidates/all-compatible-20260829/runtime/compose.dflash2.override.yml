@@ -1,0 +1,49 @@
+services:
+  kimi-k3-draft:
+    environment:
+      # The public long-context results use full-context MLA compute even
+      # though four layers are labelled sliding_attention in the checkpoint.
+      VLLM_DSPARK_DRAFT_KV_WINDOW: "372736"
+    volumes:
+      - /home/g0san/kimi-k3-production/bin/patch-dspark-standalone-dflash2.py:/usr/local/bin/patch-dspark-standalone-dflash2.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dflash2/qwen3_dflash2.py:/opt/k3-dspark-3090/source/vllm/model_executor/models/qwen3_dflash2.py:ro
+    command:
+      - "--draft-model"
+      - "/draft-model"
+      - "--target-weights"
+      - "/target-weights"
+      - "--target-config"
+      - "/opt/k3-dspark-3090/target-config"
+      - "--method"
+      - "dflash"
+      - "--device"
+      - "0"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8091"
+      - "--num-speculative-tokens"
+      - "3"
+      - "--max-model-len"
+      - "372000"
+      - "--max-num-batched-tokens"
+      - "3080"
+      - "--max-num-seqs"
+      - "4"
+      - "--max-retained-requests"
+      - "8"
+      - "--draft-kv-cache-gib"
+      - "24.0"
+      - "--draft-kv-window"
+      - "372736"
+      - "--enable-cuda-graph"
+      - "--cuda-graph-warmups"
+      - "2"
+      - "--proposal-address"
+      - "tcp://127.0.0.1:8092"
+
+  kimi-k3-production:
+    environment:
+      DFLASH_K: "3"
+    volumes:
+      - /home/g0san/kimi-k3-production/bin/patch-target-dflash2-config.py:/usr/local/bin/patch-target-dflash2-config.py:ro

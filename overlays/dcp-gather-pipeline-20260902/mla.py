@@ -1,0 +1,1638 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+"""Clean Multi-head Latent Attention for Kimi-K3 (NVIDIA).
+
+This is a self-contained MLA layer that owns the full attention path:
+
+    hidden_states
+      -> fused pre-attention ops (fused_qkv_a_proj / norms / q_b_proj)
+      -> explicit prefill / decode split
+           prefill: fused key-concat + cache-insert kernel -> run_prefill_new_tokens
+                    (+ chunked-context merge, whose per-chunk gather -> kv_b_proj
+                    -> fused K/V pack loop this layer owns); dispatched by cache
+                    dtype (bf16 / plain fp8 / fp8_ds_mla)
+           decode : W_UK absorb (BMM1) -> fused q-concat + cache-insert kernel
+                    -> impl.forward_mqa -> W_UV up-proj (MQA)
+      -> optional output gate
+      -> o_proj
+
+Unlike ``MultiHeadLatentAttentionWrapper`` (which delegates orchestration to
+``MLAAttention.forward``), this class *is* the ``AttentionLayerBase``: it selects
+the backend, builds the impl, registers itself in the forward context, owns the
+KV cache, and absorbs ``kv_b_proj`` into ``W_UK_T`` / ``W_UV`` -- mirroring the
+``DeepseekV4Attention`` structure.
+
+K3 specifics: optional rotary embedding (disabled for the target model's NoPE
+layers, enabled for DSpark) and an optional sigmoid output gate (``g_proj``).
+
+Out of scope (extension points, not wired here): prefill context parallelism
+(PCP), sparse/indexer MLA, and the ROCm/aiter fp8/fp4 BMM fast paths.
+"""
+
+import math
+import re
+from typing import TYPE_CHECKING, cast
+
+import torch
+from torch import nn
+
+import vllm.envs as envs
+from vllm import _custom_ops as ops
+from vllm.compilation.breakable_cudagraph import eager_break_during_capture
+from vllm.config import (
+    CacheConfig,
+    VllmConfig,
+    get_current_vllm_config,
+)
+from vllm.distributed import (
+    get_dcp_group,
+    get_tensor_model_parallel_world_size,
+)
+from vllm.forward_context import get_forward_context
+from vllm.logger import init_logger
+from vllm.model_executor.layers.attention.attention import (
+    _init_kv_cache_quant,
+    set_default_quant_scales,
+    should_load_quant_weights,
+)
+from vllm.model_executor.layers.attention.mla_attention import (
+    _get_kv_b_proj_input_dtype,
+    _preallocate_absorbed_mla_weights,
+    _run_mla_query_bmm,
+    accumulate_mla_context_chunk,
+    init_mla_context_partial,
+    neutralize_empty_context_partials,
+)
+from vllm.model_executor.layers.attention_layer_base import AttentionLayerBase
+from vllm.model_executor.layers.layernorm import RMSNorm
+from vllm.model_executor.layers.linear import (
+    ColumnParallelLinear,
+    DCPGroupColumnParallelLinear,
+    MergedColumnParallelLinear,
+    ReplicatedLinear,
+    RowParallelLinear,
+    UnquantizedLinearMethod,
+)
+from vllm.model_executor.layers.quantization import QuantizationConfig
+from vllm.model_executor.layers.quantization.utils.quant_utils import (
+    get_and_maybe_dequant_weights,
+)
+from vllm.model_executor.layers.rotary_embedding import RotaryEmbedding, get_rope
+from vllm.model_executor.utils import replace_parameter
+from vllm.models.common.ops import fused_q_kv_rmsnorm
+from vllm.models.kimi_k3.nvidia.ops.fused_mla_key_concat_kv_cache import (
+    fused_mla_decode_q_concat_kv_cache_insert,
+    fused_mla_key_concat_ds_mla_insert,
+    fused_mla_key_concat_kv_cache_insert,
+    fused_mla_kv_concat,
+    fused_mla_kv_concat_quant_fp8,
+    fused_mla_qkv_quant_kv_cache_fp8_insert,
+)
+from vllm.models.kimi_k3.nvidia.tp_projection import (
+    gather_kimi_sharded_projection,
+    reduce_kimi_full_width_projection,
+)
+from vllm.platforms import current_platform
+from vllm.transformers_utils.configs.kimi_linear import KimiLinearConfig
+from vllm.utils.multi_stream_utils import maybe_execute_in_parallel
+from vllm.utils.torch_utils import (
+    is_quantized_kv_cache,
+    kv_cache_dtype_str_to_dtype,
+)
+from vllm.v1.attention.backend import (
+    AttentionBackend,
+    AttentionType,
+    MLAAttentionImpl,
+)
+from vllm.v1.attention.backends.mla.prefill import get_mla_prefill_backend
+from vllm.v1.attention.ops.dcp_utils import (
+    DCPKVGatherPipeline,
+    MLADCPManager,
+    get_dcp_kv_gather_pipeline,
+)
+from vllm.v1.attention.ops.merge_attn_states import merge_attn_states
+from vllm.v1.attention.selector import get_attn_backend
+from vllm.v1.kv_cache_interface import (
+    KVCacheSpec,
+    MLAAttentionSpec,
+    SlidingWindowMLASpec,
+    get_kv_quant_mode,
+)
+from vllm.v1.worker.ubatching import dbo_current_ubatch_id
+
+if TYPE_CHECKING:
+    from vllm.model_executor.layers.attention.mla_attention import MLACommonMetadata
+
+logger = init_logger(__name__)
+
+# Below this many tokens, overlap the g_proj GEMM on the aux stream with the
+# attention front-end (the GEMM is small and launch-bound, so the overlap
+# hides it); at or above it, run the gate on the main stream.
+_GATE_MULTI_STREAM_TOKEN_THRESHOLD = 512
+_MLA_CALLER_OUTPUT_MIN_TOKENS = 1024
+
+
+class KimiK3PrefillProjectionWorkspace:
+    """Retained output storage for large dense context projections."""
+
+    def __init__(self, num_ubatches: int, min_tokens: int) -> None:
+        if num_ubatches < 1:
+            raise ValueError("num_ubatches must be positive")
+        if min_tokens < 0:
+            raise ValueError("min_tokens must be non-negative")
+        self.num_ubatches = num_ubatches
+        self.min_tokens = min_tokens
+        self._buffer: torch.Tensor | None = None
+
+    def reserve(
+        self,
+        max_tokens: int,
+        output_size: int,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> None:
+        if max_tokens < self.min_tokens:
+            raise ValueError(
+                f"max_tokens ({max_tokens}) must be at least min_tokens "
+                f"({self.min_tokens})"
+            )
+        self._buffer = torch.empty(
+            (self.num_ubatches, max_tokens, output_size),
+            dtype=dtype,
+            device=device,
+        )
+
+    @property
+    def nbytes(self) -> int:
+        buffer = self._buffer
+        return 0 if buffer is None else buffer.numel() * buffer.element_size()
+
+    def get(
+        self,
+        num_tokens: int,
+        output_size: int,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor | None:
+        if num_tokens < self.min_tokens:
+            return None
+        buffer = self._buffer
+        if buffer is None:
+            raise RuntimeError("Kimi-K3 prefill projection workspace is not reserved")
+        if num_tokens > buffer.shape[1]:
+            raise ValueError(
+                f"context projection needs {num_tokens} rows, but the retained "
+                f"workspace has {buffer.shape[1]}"
+            )
+        if output_size != buffer.shape[2]:
+            raise ValueError(
+                f"context projection needs {output_size} columns, but the retained "
+                f"workspace has {buffer.shape[2]}"
+            )
+        if dtype != buffer.dtype or device != buffer.device:
+            raise ValueError(
+                "context projection input and retained workspace must have the "
+                "same dtype and device"
+            )
+        ubatch_id = dbo_current_ubatch_id()
+        if ubatch_id >= self.num_ubatches:
+            raise RuntimeError(
+                f"ubatch {ubatch_id} has no Kimi-K3 prefill projection workspace; "
+                f"configured slots: {self.num_ubatches}"
+            )
+        return buffer[ubatch_id, :num_tokens]
+
+
+def _parse_k3_qrep_layers(spec: str) -> frozenset[int] | None:
+    if spec.strip().lower() == "all":
+        return None
+    layers: set[int] = set()
+    for item in spec.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if "-" in item:
+            start_text, end_text = item.split("-", 1)
+            start = int(start_text)
+            end = int(end_text)
+            if start < 0 or end < start:
+                raise ValueError(f"Invalid K3 qrep layer range: {item!r}")
+            layers.update(range(start, end + 1))
+        else:
+            layer = int(item)
+            if layer < 0:
+                raise ValueError(f"Invalid K3 qrep layer: {item!r}")
+            layers.add(layer)
+    return frozenset(layers)
+
+
+def _k3_dcp_qrep_enabled(prefix: str, vllm_config: VllmConfig) -> bool:
+    parallel_config = vllm_config.parallel_config
+    if (
+        not envs.VLLM_DCP_Q_REPLICATE
+        or parallel_config.decode_context_parallel_size <= 1
+        or parallel_config.prefill_context_parallel_size > 1
+    ):
+        return False
+    layer_spec = envs.VLLM_K3_DCP_Q_REPLICATE_LAYERS
+    if layer_spec is None:
+        raise ValueError(
+            "Kimi-K3 DCP query replication duplicates query and absorbed "
+            "projection weights. Set VLLM_K3_DCP_Q_REPLICATE_LAYERS to an "
+            "explicit layer list/range, or to 'all' after verifying the VRAM "
+            "budget."
+        )
+    match = re.search(r"(?:^|\.)layers\.(\d+)(?:\.|$)", prefix)
+    if match is None:
+        raise ValueError(
+            "VLLM_K3_DCP_Q_REPLICATE_LAYERS requires a layer-qualified prefix, "
+            f"got {prefix!r}"
+        )
+    layers = _parse_k3_qrep_layers(layer_spec)
+    return layers is None or int(match.group(1)) in layers
+
+
+def _k3_projected_query_heads(
+    num_local_heads: int,
+    dcp_world_size: int,
+    dcp_q_replicate: bool,
+) -> int:
+    """Return the DCP-group head width emitted by the query projection."""
+    return int(num_local_heads) * (int(dcp_world_size) if dcp_q_replicate else 1)
+
+
+@torch.compile(backend=current_platform.simple_compile_backend)
+def _gate_sigmoid_mul(attn_out: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    """Apply the sigmoid output gate to a precomputed ``g_proj`` projection."""
+    return attn_out * gate.sigmoid()
+
+
+def _restore_merged_output_order(
+    rank_major_output: torch.Tensor,
+    output_sizes: list[int],
+    tp_size: int,
+) -> torch.Tensor:
+    """Convert rank-major merged shards into logical projection order."""
+    if tp_size == 1:
+        return rank_major_output
+    if any(size % tp_size for size in output_sizes):
+        raise ValueError(
+            f"Merged output sizes {output_sizes} must be divisible by TP={tp_size}"
+        )
+    local_sizes = [size // tp_size for size in output_sizes]
+    local_total = sum(local_sizes)
+    expected_width = local_total * tp_size
+    if rank_major_output.shape[-1] != expected_width:
+        raise ValueError(
+            "Unexpected gathered merged projection width: "
+            f"got {rank_major_output.shape[-1]}, expected {expected_width}"
+        )
+    rank_major = rank_major_output.unflatten(-1, (tp_size, local_total))
+    logical_local_shards = rank_major.split(local_sizes, dim=-1)
+    return torch.cat(
+        [shards.flatten(-2) for shards in logical_local_shards],
+        dim=-1,
+    )
+
+
+def _reuse_consumed_query_for_context_output(
+    query: torch.Tensor,
+    output: torch.Tensor,
+) -> torch.Tensor:
+    """Return contiguous semantic-output storage backed by a consumed query."""
+    if not query.is_contiguous():
+        raise ValueError("Kimi-K3 MLA prefill query storage must be contiguous")
+    required_bytes = output.numel() * output.element_size()
+    query_bytes = query.view(torch.uint8).flatten()
+    if query_bytes.numel() < required_bytes:
+        raise ValueError(
+            "Kimi-K3 MLA prefill query storage is too small for compact context "
+            f"output: available={query_bytes.numel()} bytes, "
+            f"required={required_bytes} bytes"
+        )
+    return query_bytes[:required_bytes].view(output.dtype).view_as(output)
+
+
+class KimiShardedMergedColumnParallelLinear(MergedColumnParallelLinear):
+    """Merged column projection with one gather and logical-shard reorder."""
+
+    def __init__(
+        self,
+        input_size: int,
+        output_sizes: list[int],
+        *,
+        quant_config: QuantizationConfig | None,
+        prefix: str,
+    ) -> None:
+        super().__init__(
+            input_size,
+            output_sizes,
+            bias=False,
+            gather_output=False,
+            quant_config=quant_config,
+            prefix=prefix,
+        )
+
+    def forward(self, x: torch.Tensor):
+        output_parallel, output_bias = super().forward(x)
+        if self.tp_size == 1:
+            return output_parallel, output_bias
+        rank_major_output = gather_kimi_sharded_projection(output_parallel)
+        output = _restore_merged_output_order(
+            rank_major_output,
+            self.output_sizes,
+            self.tp_size,
+        )
+        return output, output_bias
+
+
+def _backend_owns_decode_dcp(impl: object, dcp_world_size: int) -> bool:
+    """Return whether the selected backend gathers and combines DCP itself."""
+    return dcp_world_size > 1 and bool(
+        getattr(impl, "owns_decode_dcp_collectives", False)
+    )
+
+
+class MultiHeadLatentAttention(nn.Module, AttentionLayerBase):
+    """Kimi-K3 Multi-head Latent Attention with optional RoPE and output gate."""
+
+    def __init__(
+        self,
+        config: KimiLinearConfig,
+        hidden_size: int,
+        num_heads: int,
+        qk_nope_head_dim: int,
+        qk_rope_head_dim: int,
+        v_head_dim: int,
+        q_lora_rank: int | None,
+        kv_lora_rank: int,
+        use_output_gate: bool = False,
+        cache_config: CacheConfig | None = None,
+        quant_config: QuantizationConfig | None = None,
+        prefix: str = "",
+        aux_stream: torch.cuda.Stream | None = None,
+        prefill_projection_workspace: KimiK3PrefillProjectionWorkspace | None = None,
+        use_rope: bool = False,
+        non_causal_multi_token_decode: bool = False,
+    ) -> None:
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.qk_nope_head_dim = qk_nope_head_dim
+        self.qk_rope_head_dim = qk_rope_head_dim
+        self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
+        self.v_head_dim = v_head_dim
+        self.q_lora_rank = q_lora_rank
+        self.kv_lora_rank = kv_lora_rank
+        self.non_causal_multi_token_decode = non_causal_multi_token_decode
+        self.draft_kv_window = (
+            int(envs.VLLM_DSPARK_DRAFT_KV_WINDOW)
+            if non_causal_multi_token_decode
+            else 0
+        )
+        if self.draft_kv_window < 0:
+            raise ValueError(
+                "VLLM_DSPARK_DRAFT_KV_WINDOW must be non-negative, got "
+                f"{self.draft_kv_window}."
+            )
+        # Latent "head" seen by the attention kernel / KV cache.
+        self.head_size = kv_lora_rank + qk_rope_head_dim
+        self.scale = self.qk_head_dim**-0.5
+        self.rms_norm_eps = config.rms_norm_eps
+        self.layer_name = prefix
+        self.prefill_projection_workspace = prefill_projection_workspace
+
+        self.rotary_emb: RotaryEmbedding | None = None
+        if use_rope:
+            rope_parameters = dict(config.rope_parameters)
+            if rope_parameters["rope_type"] != "default":
+                rope_parameters["rope_type"] = (
+                    "deepseek_yarn"
+                    if rope_parameters.get("apply_yarn_scaling", True)
+                    else "deepseek_llama_scaling"
+                )
+            self.rotary_emb = get_rope(
+                qk_rope_head_dim,
+                max_position=config.max_position_embeddings,
+                rope_parameters=rope_parameters,
+                is_neox_style=False,
+                dtype=torch.float32,
+            )
+            if rope_parameters["rope_type"] == "deepseek_yarn":
+                mscale_all_dim = rope_parameters.get("mscale_all_dim", False)
+                scaling_factor = rope_parameters["factor"]
+                mscale = (
+                    1.0
+                    if scaling_factor <= 1
+                    else 0.1 * float(mscale_all_dim) * math.log(scaling_factor) + 1.0
+                )
+                self.scale *= mscale * mscale
+            # The fused epilogues read the cos/sin table directly in fp32 and run
+            # the RoPE math in fp32, so there is no per-forward dtype cast (and no
+            # precision loss). deepseek_yarn builds cos_sin_cache in fp32 already;
+            # dtype=torch.float32 above forces it for the default rope too (the
+            # DSpark draft, which has no yarn scaling).
+            assert self.rotary_emb.cos_sin_cache.dtype == torch.float32, (
+                "K3 fused MLA RoPE requires an fp32 cos/sin cache; got "
+                f"{self.rotary_emb.cos_sin_cache.dtype}."
+            )
+
+        tp_size = get_tensor_model_parallel_world_size()
+        assert num_heads % tp_size == 0
+        self.num_heads = num_heads
+        self.num_local_heads = num_heads // tp_size
+        vllm_config = get_current_vllm_config()
+        self.dcp_q_replicate = _k3_dcp_qrep_enabled(prefix, vllm_config)
+        q_proj_cls = (
+            DCPGroupColumnParallelLinear
+            if self.dcp_q_replicate
+            else ColumnParallelLinear
+        )
+
+        # ---- Pre-attention projections (fusable front-end) ----
+        # Two query variants: a low-rank q-LoRA path (Kimi-K3) fused with the
+        # kv-down proj, or an uncompressed q path (Kimi-Linear, ``q_lora_rank``
+        # None) with a standalone ``q_proj`` and separate ``kv_a_proj_with_mqa``.
+        if self.q_lora_rank is not None:
+            # Fused q-down + kv-down projection. Replicated (disable_tp) because
+            # the low-rank latents are shared across TP ranks; TP splitting
+            # happens at q_b_proj / kv_b_proj. Checkpoint weights ``q_a_proj``
+            # and ``kv_a_proj_with_mqa`` map onto shards 0 and 1 respectively.
+            qkv_a_output_sizes = [
+                self.q_lora_rank,
+                self.kv_lora_rank + self.qk_rope_head_dim,
+            ]
+            if envs.VLLM_KIMI_SHARD_QKV_A and tp_size > 1:
+                self.fused_qkv_a_proj = KimiShardedMergedColumnParallelLinear(
+                    self.hidden_size,
+                    qkv_a_output_sizes,
+                    quant_config=quant_config,
+                    prefix=f"{prefix}.fused_qkv_a_proj",
+                )
+            else:
+                self.fused_qkv_a_proj = MergedColumnParallelLinear(
+                    self.hidden_size,
+                    qkv_a_output_sizes,
+                    bias=False,
+                    quant_config=quant_config,
+                    prefix=f"{prefix}.fused_qkv_a_proj",
+                    disable_tp=True,
+                )
+            self.q_a_layernorm = RMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
+            self.q_b_proj = q_proj_cls(
+                self.q_lora_rank,
+                self.num_heads * self.qk_head_dim,
+                bias=False,
+                quant_config=quant_config,
+                prefix=f"{prefix}.q_b_proj",
+            )
+        else:
+            # Uncompressed query: full-rank q_proj (TP-split over heads) plus a
+            # replicated kv-down projection (shared latent across TP ranks).
+            self.q_proj = q_proj_cls(
+                self.hidden_size,
+                self.num_heads * self.qk_head_dim,
+                bias=False,
+                quant_config=quant_config,
+                prefix=f"{prefix}.q_proj",
+            )
+            self.kv_a_proj_with_mqa = ReplicatedLinear(
+                self.hidden_size,
+                self.kv_lora_rank + self.qk_rope_head_dim,
+                bias=False,
+                quant_config=quant_config,
+                prefix=f"{prefix}.kv_a_proj_with_mqa",
+            )
+        self.kv_a_layernorm = RMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
+        self.kv_b_proj = ColumnParallelLinear(
+            self.kv_lora_rank,
+            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
+            bias=False,
+            quant_config=quant_config,
+            prefix=f"{prefix}.kv_b_proj",
+        )
+
+        # ---- Post-attention projections ----
+        self.use_output_gate = use_output_gate
+        self.g_proj = (
+            ColumnParallelLinear(
+                self.hidden_size,
+                self.num_heads * self.v_head_dim,
+                bias=False,
+                quant_config=quant_config,
+                prefix=f"{prefix}.g_proj",
+            )
+            if use_output_gate
+            else None
+        )
+        # Aux stream (created at the model level, DeepseekV4 convention) for
+        # overlapping the g_proj GEMM with the attention front-end. None on
+        # ROCm/non-cuda -> maybe_execute_in_parallel falls back to sequential.
+        self.aux_stream = aux_stream
+        self._gate_events = (
+            [torch.cuda.Event(), torch.cuda.Event()]
+            if self.g_proj is not None and current_platform.is_cuda_alike()
+            else None
+        )
+        self.o_proj = RowParallelLinear(
+            self.num_heads * self.v_head_dim,
+            self.hidden_size,
+            bias=False,
+            quant_config=quant_config,
+            prefix=f"{prefix}.o_proj",
+        )
+
+        # ---- Attention backend / impl / KV cache ----
+        self.quant_config = quant_config
+        if cache_config is not None:
+            self.kv_cache_dtype = cache_config.cache_dtype
+        else:
+            self.kv_cache_dtype = "auto"
+
+        dtype = torch.get_default_dtype()
+        self.attn_backend = get_attn_backend(
+            self.head_size,
+            dtype,
+            self.kv_cache_dtype,
+            use_mla=True,
+            use_sparse=False,
+            num_heads=self.num_local_heads,
+        )
+        _init_kv_cache_quant(self, quant_config, prefix)
+        # Unit (1.0) scale for the fused fp8 prefill path: q/k/v are cast
+        # unscaled to match forward_mha (the prefill flash path does not
+        # dequantize); only the cache uses _k_scale.
+        self.register_buffer(
+            "_one_scale", torch.ones(1, dtype=torch.float32), persistent=False
+        )
+
+        impl_cls = cast(type[MLAAttentionImpl], self.attn_backend.get_impl_cls())
+        self.impl = impl_cls(  # type: ignore[assignment]
+            num_heads=self.num_local_heads,
+            head_size=self.head_size,
+            scale=self.scale,
+            num_kv_heads=1,
+            alibi_slopes=None,
+            sliding_window=None,
+            kv_cache_dtype=self.kv_cache_dtype,
+            logits_soft_cap=None,
+            attn_type=AttentionType.DECODER,
+            kv_sharing_target_layer_name=None,
+            q_lora_rank=self.q_lora_rank,
+            kv_lora_rank=self.kv_lora_rank,
+            qk_nope_head_dim=self.qk_nope_head_dim,
+            qk_rope_head_dim=self.qk_rope_head_dim,
+            qk_head_dim=self.qk_head_dim,
+            v_head_dim=self.v_head_dim,
+            kv_b_proj=self.kv_b_proj,
+            indexer=None,
+        )
+        if getattr(self.impl, "dcp_world_size", -1) < 1:
+            # FlashAttention requires the cp_world_size is positive and the cp_rank
+            # is non negative; manually set here if not set by caller (-1 is unset)
+            self.impl.dcp_world_size = 1
+            self.impl.dcp_rank = 0
+        self.q_pad_num_heads = getattr(self.impl, "q_pad_num_heads", None)
+
+        parallel_config = vllm_config.parallel_config
+        assert parallel_config.prefill_context_parallel_size == 1, (
+            "Kimi-K3 MultiHeadLatentAttention does not support prefill context "
+            "parallelism."
+        )
+        self.dcp_world_size = parallel_config.decode_context_parallel_size
+        self.backend_owns_decode_dcp = _backend_owns_decode_dcp(
+            self.impl, self.dcp_world_size
+        )
+        if self.dcp_q_replicate:
+            if not self.backend_owns_decode_dcp:
+                raise NotImplementedError(
+                    "Kimi-K3 DCP query replication requires a backend-owned "
+                    "decode DCP path."
+                )
+            self.impl.dcp_q_replicate = True
+        assert (
+            self.dcp_world_size <= 1
+            or self.rotary_emb is None
+            or self.backend_owns_decode_dcp
+        ), (
+            "Kimi-K3 RoPE with decode context parallelism requires an attention "
+            "backend that owns its DCP query and output collectives."
+        )
+        self.dcp_manager: MLADCPManager | None = None
+        if self.dcp_world_size > 1 and not self.backend_owns_decode_dcp:
+            query_dtype = (
+                torch.float8_e4m3fn
+                if is_quantized_kv_cache(self.kv_cache_dtype)
+                and self.kv_cache_dtype != "fp8_ds_mla"
+                else dtype
+            )
+            self.dcp_manager = MLADCPManager(
+                vllm_config=vllm_config,
+                device=next(self.kv_b_proj.parameters()).device,
+                num_heads=self.num_local_heads,
+                query_head_dim=self.head_size,
+                output_head_dim=self.kv_lora_rank,
+                query_dtype=query_dtype,
+                output_dtype=dtype,
+                padded_num_heads=self.q_pad_num_heads,
+                is_lse_base_on_e=self.impl.lse_base_on_e,
+                use_pcp=False,
+            )
+        self.prefill_backend = get_mla_prefill_backend(vllm_config)(
+            num_heads=self.num_local_heads,
+            scale=self.scale,
+            kv_lora_rank=self.kv_lora_rank,
+            qk_nope_head_dim=self.qk_nope_head_dim,
+            qk_rope_head_dim=self.qk_rope_head_dim,
+            v_head_dim=self.v_head_dim,
+            vllm_config=vllm_config,
+        )
+
+        compilation_config = vllm_config.compilation_config
+        if prefix in compilation_config.static_forward_context:
+            raise ValueError(f"Duplicate layer name: {prefix}")
+        compilation_config.static_forward_context[prefix] = self
+        self.kv_cache = torch.tensor([])
+
+    @property
+    def supports_caller_output(self) -> bool:
+        """Report whether MLA can write its reduced output into caller storage."""
+        return (
+            isinstance(self.o_proj.quant_method, UnquantizedLinearMethod)
+            and getattr(self.o_proj, "weight", None) is not None
+            and self.o_proj.input_is_parallel
+            and self.o_proj.bias is None
+            and self.o_proj.reduce_results
+            and not envs.VLLM_BATCH_INVARIANT
+        )
+
+    def should_use_caller_output(self, hidden_states: torch.Tensor) -> bool:
+        """Select consumed hidden-state storage for allocation-sensitive prefill."""
+        weight = getattr(self.o_proj, "weight", None)
+        return (
+            self.supports_caller_output
+            and hidden_states.ndim == 2
+            and hidden_states.shape == (hidden_states.shape[0], self.o_proj.output_size)
+            and hidden_states.shape[0] >= _MLA_CALLER_OUTPUT_MIN_TOKENS
+            and hidden_states.is_contiguous()
+            and weight is not None
+            and hidden_states.dtype == weight.dtype
+            and hidden_states.device == weight.device
+        )
+
+    def _project_output_into(
+        self,
+        attn_out: torch.Tensor,
+        output: torch.Tensor,
+    ) -> torch.Tensor:
+        """Project MLA output into consumed storage and reduce it in place."""
+        if not self.should_use_caller_output(output):
+            raise ValueError(
+                "Kimi-K3 MLA caller-owned output requires at least 1,024 rows "
+                "of contiguous projection-compatible storage"
+            )
+        if attn_out.ndim != 2:
+            raise ValueError("Kimi-K3 MLA output projection requires a 2D input")
+        expected_input_shape = (
+            output.shape[0],
+            self.o_proj.input_size_per_partition,
+        )
+        if tuple(attn_out.shape) != expected_input_shape:
+            raise ValueError(
+                "Kimi-K3 MLA projection input has shape "
+                f"{tuple(attn_out.shape)}; expected {expected_input_shape}"
+            )
+        if attn_out.dtype != output.dtype or attn_out.device != output.device:
+            raise ValueError(
+                "Kimi-K3 MLA projection input and caller output must share "
+                "dtype and device"
+            )
+        if attn_out.untyped_storage().data_ptr() == output.untyped_storage().data_ptr():
+            raise ValueError(
+                "Kimi-K3 MLA caller output must not alias the projection input"
+            )
+        torch.mm(attn_out, self.o_proj.weight.t(), out=output)
+        return reduce_kimi_full_width_projection(output, self.o_proj.tp_size)
+
+    # ------------------------------------------------------------------
+    # AttentionLayerBase interface
+    # ------------------------------------------------------------------
+    def get_attn_backend(self) -> type[AttentionBackend]:
+        return self.attn_backend
+
+    def get_kv_cache_spec(self, vllm_config: VllmConfig) -> KVCacheSpec:
+        kv_cache_dtype = kv_cache_dtype_str_to_dtype(
+            self.kv_cache_dtype, vllm_config.model_config
+        )
+        raw_shard_draft = envs.VLLM_DCP_SHARD_DRAFT
+        shard_draft = (
+            False
+            if raw_shard_draft is None
+            else raw_shard_draft.lower() in ("1", "true", "yes")
+        )
+        dcp_replicated = bool(
+            self.non_causal_multi_token_decode
+            and not shard_draft
+            and vllm_config.parallel_config.decode_context_parallel_size > 1
+        )
+        common_kwargs = dict(
+            block_size=vllm_config.cache_config.block_size,
+            num_kv_heads=1,
+            head_size=self.head_size,
+            dtype=kv_cache_dtype,
+            cache_dtype_str=self.kv_cache_dtype,
+            kv_quant_mode=get_kv_quant_mode(self.kv_cache_dtype),
+            dcp_replicated=dcp_replicated,
+        )
+        if self.draft_kv_window:
+            if self.draft_kv_window < vllm_config.cache_config.block_size:
+                raise ValueError(
+                    "VLLM_DSPARK_DRAFT_KV_WINDOW must be at least one KV "
+                    f"block ({vllm_config.cache_config.block_size}), got "
+                    f"{self.draft_kv_window}."
+                )
+            return SlidingWindowMLASpec(
+                **common_kwargs,
+                sliding_window=self.draft_kv_window,
+                non_causal_multi_token_decode=self.non_causal_multi_token_decode,
+            )
+        # TODO: Remove this type suppression when MLAAttentionSpec declares
+        # non_causal_multi_token_decode in its constructor signature.
+        return MLAAttentionSpec(  # type: ignore[call-arg]
+            **common_kwargs,
+            non_causal_multi_token_decode=self.non_causal_multi_token_decode,
+        )
+
+    def process_weights_after_loading(self, act_dtype: torch.dtype) -> None:
+        """Absorb ``kv_b_proj`` into decode-time ``W_UK_T`` / ``W_UV`` bmm weights.
+
+        ``kv_b_proj`` produces ``[k_nope; v]`` per head from the ``kv_lora_rank``
+        latent. For the MQA decode path we pre-split it so that queries are
+        projected into latent space by ``W_UK_T`` and the attention output is
+        projected back to ``v`` by ``W_UV`` -- avoiding materializing full K/V.
+        """
+        pre_w_uv, pre_w_uk_t = _preallocate_absorbed_mla_weights(self, act_dtype)
+        kv_b_proj_weight = get_and_maybe_dequant_weights(
+            self.kv_b_proj, out_dtype=act_dtype
+        ).T
+        assert kv_b_proj_weight.shape == (
+            self.kv_lora_rank,
+            self.num_local_heads * (self.qk_nope_head_dim + self.v_head_dim),
+        ), f"{kv_b_proj_weight.shape=}"
+        kv_b_proj_weight = kv_b_proj_weight.view(
+            self.kv_lora_rank,
+            self.num_local_heads,
+            self.qk_nope_head_dim + self.v_head_dim,
+        )
+        W_UK, W_UV = kv_b_proj_weight.split(
+            [self.qk_nope_head_dim, self.v_head_dim], dim=-1
+        )
+        # (L, N, V) -> (N, L, V)
+        w_uv = W_UV.transpose(0, 1)
+        if pre_w_uv is not None:
+            pre_w_uv.copy_(w_uv)
+            w_uv = pre_w_uv
+        replace_parameter(self, "W_UV", w_uv, prefer_copy=True)
+        # (L, N, P) -> (N, P, L)
+        w_uk_t = W_UK.permute(1, 2, 0)
+        if pre_w_uk_t is not None:
+            pre_w_uk_t.copy_(w_uk_t)
+            w_uk_t = pre_w_uk_t
+        replace_parameter(self, "W_UK_T", w_uk_t, prefer_copy=True)
+        self.W_UK_T_dcp_qrep: torch.Tensor | None = None
+        if self.dcp_q_replicate:
+            self.W_UK_T_dcp_qrep = get_dcp_group().all_gather(
+                self.W_UK_T.contiguous(),
+                dim=0,
+            )
+
+        quant_method = (
+            self.quant_config.get_quant_method(self, prefix=self.layer_name)
+            if self.quant_config
+            else None
+        )
+        if not should_load_quant_weights(quant_method):
+            set_default_quant_scales(self, register_buffer=False)
+
+        # Precompute reciprocal scales once here (scales are final after load;
+        # K3 has no runtime calculate_kv_scales path) so the fp8 fused kernels
+        # in the decode/prefill hot path take a ready inverse instead of
+        # launching a per-step reciprocal kernel.
+        self.register_buffer(
+            "_q_scale_inv", self._q_scale.reciprocal().reshape(1), persistent=False
+        )
+        self.register_buffer(
+            "_k_scale_inv", self._k_scale.reciprocal().reshape(1), persistent=False
+        )
+
+    def _v_up_proj(self, x: torch.Tensor, out: torch.Tensor) -> None:
+        """Project latent attention output back to ``v`` via ``W_UV`` (bmm)."""
+        # (B, N, L) -> (N, B, L)
+        x = x.view(-1, self.num_local_heads, self.kv_lora_rank).transpose(0, 1)
+        out = out.view(-1, self.num_local_heads, self.v_head_dim)
+        # (N, B, L) x (N, L, V) -> (N, B, V) written transposed into (B, N, V)
+        torch.bmm(x, self.W_UV, out=out.transpose(0, 1))
+
+    def _absorb_decode_query(self, q_nope: torch.Tensor) -> torch.Tensor:
+        """Project the Kimi decode query into MLA latent space.
+
+        The NoPE component is an interleaved head view of the combined
+        NoPE/RoPE projection. Tensor-core cuBLAS batched-GEMM algorithms may
+        issue vector reads beyond the logical matrix when the batch stride is
+        smaller than a matrix's storage span. Materializing head-major storage
+        gives every batch matrix an independent contiguous range.
+        """
+        query = q_nope.transpose(0, 1).contiguous()
+        output = query.new_empty((query.shape[0], query.shape[1], self.kv_lora_rank))
+        weight = (
+            self.W_UK_T_dcp_qrep
+            if getattr(self, "dcp_q_replicate", False)
+            else self.W_UK_T
+        )
+        assert weight is not None
+        _run_mla_query_bmm(
+            query,
+            weight,
+            output,
+            use_safe_op=True,
+        )
+        return output.transpose(0, 1)
+
+    def _attn_read_kv_cache(self) -> torch.Tensor:
+        """Latent cache as seen by the attention read kernels (decode / context).
+
+        A plain per-tensor fp8 cache is stored as ``uint8``; view it as fp8 so
+        the backend reads it as E4M3 rather than fp4/E2M1 -- the latter doubles
+        the perceived head dim (``head_size * 2``) and fails the kernel's
+        ``head_dim_k == head_dim_q`` check. Mirrors ``MLAAttention.forward``;
+        the fp8_ds_mla layout keeps its native uint8 view.
+        """
+        cache = self.kv_cache
+        if (
+            is_quantized_kv_cache(self.kv_cache_dtype)
+            and self.kv_cache_dtype != "fp8_ds_mla"
+        ):
+            return cache.view(current_platform.fp8_dtype())
+        return cache
+
+    # ------------------------------------------------------------------
+    # Forward
+    # ------------------------------------------------------------------
+    def _forward_attn(
+        self,
+        positions: torch.Tensor,
+        hidden_states: torch.Tensor,
+        rope_cos_sin_cache: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Attention front-end: fused qkv-a proj -> norms -> q_b -> attention.
+
+        Returns the pre-gate attention output ``[num_tokens,
+        num_local_heads * v_head_dim]``. On a profile/dummy run
+        it returns a zeroed buffer.
+        """
+        if self.q_lora_rank is not None:
+            qkv_lora = self.fused_qkv_a_proj(hidden_states)[0]
+            q_c, kv_c, k_pe = qkv_lora.split(
+                [self.q_lora_rank, self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
+            )
+            q_c, kv_c_normed = fused_q_kv_rmsnorm(
+                q_c,
+                kv_c,
+                self.q_a_layernorm.weight.data,
+                self.kv_a_layernorm.weight.data,
+                self.rms_norm_eps,
+            )
+            q_heads = _k3_projected_query_heads(
+                self.num_local_heads,
+                self.dcp_world_size,
+                self.dcp_q_replicate,
+            )
+            q = self.q_b_proj(q_c)[0].view(-1, q_heads, self.qk_head_dim)
+        else:
+            # Uncompressed query: project directly (no q-LoRA, no q norm) and
+            # normalize only the kv latent.
+            q_heads = _k3_projected_query_heads(
+                self.num_local_heads,
+                self.dcp_world_size,
+                self.dcp_q_replicate,
+            )
+            q = self.q_proj(hidden_states)[0].view(-1, q_heads, self.qk_head_dim)
+            kv_lora = self.kv_a_proj_with_mqa(hidden_states)[0]
+            kv_c, k_pe = kv_lora.split(
+                [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
+            )
+            kv_c_normed = self.kv_a_layernorm(kv_c)
+        k_pe = k_pe.unsqueeze(1)
+
+        attn_out = torch.empty(
+            (hidden_states.shape[0], self.num_local_heads * self.v_head_dim),
+            dtype=hidden_states.dtype,
+            device=hidden_states.device,
+        )
+        self._attention(
+            positions,
+            q,
+            kv_c_normed,
+            k_pe,
+            attn_out,
+            rope_cos_sin_cache=rope_cos_sin_cache,
+        )
+        return attn_out
+
+    def forward(
+        self,
+        positions: torch.Tensor,
+        hidden_states: torch.Tensor,
+        rope_cos_sin_cache: torch.Tensor | None = None,
+        output: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        # Both branches produce (attn_out, gate); they differ only in whether
+        # the g_proj GEMM is overlapped on the aux stream.
+        g_proj = self.g_proj
+        events = self._gate_events
+        if (
+            g_proj is not None
+            and events is not None
+            and self.aux_stream is not None
+            and hidden_states.shape[0] < _GATE_MULTI_STREAM_TOKEN_THRESHOLD
+        ):
+            attn_out, gate = maybe_execute_in_parallel(
+                lambda: self._forward_attn(
+                    positions, hidden_states, rope_cos_sin_cache
+                ),
+                lambda: g_proj(hidden_states)[0],
+                events[0],
+                events[1],
+                self.aux_stream,
+            )
+        else:
+            attn_out = self._forward_attn(positions, hidden_states, rope_cos_sin_cache)
+            gate = g_proj(hidden_states)[0] if g_proj is not None else None
+
+        if gate is not None:
+            attn_out = _gate_sigmoid_mul(attn_out, gate)
+
+        if output is not None:
+            return self._project_output_into(attn_out, output)
+        return self.o_proj(attn_out)[0]
+
+    @eager_break_during_capture
+    def _attention(
+        self,
+        positions: torch.Tensor,
+        q: torch.Tensor,
+        kv_c_normed: torch.Tensor,
+        k_pe: torch.Tensor,
+        attn_out: torch.Tensor,
+        *,
+        rope_cos_sin_cache: torch.Tensor | None = None,
+    ) -> None:
+        forward_context = get_forward_context()
+        attn_metadata_by_layer = forward_context.attn_metadata
+        if attn_metadata_by_layer is None:
+            attn_out.zero_()
+            return
+        assert isinstance(attn_metadata_by_layer, dict)
+        attn_metadata = cast(
+            "MLACommonMetadata", attn_metadata_by_layer[self.layer_name]
+        )
+
+        num_actual_toks = attn_metadata.num_actual_tokens
+        if num_actual_toks < int(attn_out.shape[0]):
+            # Downstream gate and output projections consume graph-padded rows.
+            # Define inactive rows before they enter a collective operation.
+            attn_out[num_actual_toks:].zero_()
+        slot_mapping_by_layer = forward_context.slot_mapping
+        assert isinstance(slot_mapping_by_layer, dict)
+        slot_mapping = slot_mapping_by_layer[self.layer_name]
+
+        q = q[:num_actual_toks]
+        kv_c_normed = kv_c_normed[:num_actual_toks]
+        k_pe = k_pe[:num_actual_toks]
+        positions = positions[:num_actual_toks]
+        attn_out = attn_out[:num_actual_toks]
+
+        cos_sin_cache = None
+        rope_positions = None
+        if self.rotary_emb is not None:
+            # Pass the fp32 cos/sin table straight to the fused epilogue (it reads
+            # fp32 and does the RoPE math in fp32) -- no per-forward dtype cast.
+            cos_sin_cache = (
+                rope_cos_sin_cache
+                if rope_cos_sin_cache is not None
+                else self.rotary_emb.cos_sin_cache
+            )
+            rope_positions = positions
+
+        # Decode tokens are laid out first, prefill tokens after. The fused
+        # prefill covers every supported config (bf16 / plain-fp8 /
+        # fp8_ds_mla), so there is no dense-MHA (forward_mha) fallback.
+        num_mqa_tokens = attn_metadata.num_decode_tokens
+        num_mha_tokens = q.size(0) - num_mqa_tokens
+
+        # Both the prefill and decode fused epilogues write their own cache
+        # slice, so there is no separate do_kv_cache_update.
+
+        # ---- Prefill: fused key-concat + cache-insert + attention ----
+        if num_mha_tokens > 0:
+            prefill_q = q[num_mqa_tokens:]
+            if getattr(self, "dcp_q_replicate", False):
+                q_proj = self.q_b_proj if self.q_lora_rank is not None else self.q_proj
+                prefill_q = q_proj._local_view(prefill_q)
+            self._forward_prefill_fused(
+                prefill_q,
+                kv_c_normed[num_mqa_tokens:],
+                k_pe[num_mqa_tokens:],
+                rope_positions[num_mqa_tokens:] if rope_positions is not None else None,
+                cos_sin_cache,
+                slot_mapping[num_mqa_tokens:num_actual_toks],
+                attn_metadata,
+                attn_out[num_mqa_tokens:],
+            )
+
+        # ---- Decode: latent multi-query attention ----
+        if num_mqa_tokens > 0:
+            mqa_q_nope, mqa_q_pe = q[:num_mqa_tokens].split(
+                [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1
+            )
+            # BMM1: absorb q_nope into latent space. (N,B,P) x (N,P,L) -> (B,N,L)
+            ql_nope = self._absorb_decode_query(mqa_q_nope)
+            # Fused: concat mqa_q = [ql_nope | q_pe] and insert the decode-token
+            # latent into the paged cache (one launch, right before forward_mqa).
+            mqa_q = self._decode_concat_cache(
+                ql_nope,
+                mqa_q_pe,
+                kv_c_normed[:num_mqa_tokens],
+                k_pe[:num_mqa_tokens],
+                rope_positions[:num_mqa_tokens] if rope_positions is not None else None,
+                cos_sin_cache,
+                slot_mapping[:num_mqa_tokens],
+            )
+            if self.dcp_manager is not None:
+                assert self.dcp_manager.query_gather is not None
+                mqa_q = self.dcp_manager.query_gather(mqa_q)
+            latent_out, lse = self.impl.forward_mqa(  # type: ignore[attr-defined]
+                mqa_q, self._attn_read_kv_cache(), attn_metadata, self
+            )
+            if self.dcp_manager is not None:
+                assert lse is not None
+                assert attn_metadata.decode is not None
+                latent_out = self.dcp_manager.combine(
+                    latent_out,
+                    lse,
+                    seq_lens=attn_metadata.decode.seq_lens,
+                    query_start_loc=attn_metadata.query_start_loc[
+                        : attn_metadata.num_decodes + 1
+                    ],
+                )
+            self._v_up_proj(latent_out, out=attn_out[:num_mqa_tokens])
+
+    def _decode_concat_cache(
+        self,
+        ql_nope: torch.Tensor,
+        q_pe: torch.Tensor,
+        kv_c_normed: torch.Tensor,
+        k_pe: torch.Tensor,
+        positions: torch.Tensor | None,
+        cos_sin_cache: torch.Tensor | None,
+        slot_mapping: torch.Tensor,
+    ) -> torch.Tensor:
+        """Fused decode query-concat + latent cache insert, dispatched by cache
+        dtype (same policy as prefill: fp8 cache -> fp8 query)."""
+        if self.kv_cache_dtype == "fp8_ds_mla":
+            cache = self.kv_cache
+            if cache.dtype != torch.uint8:
+                cache = cache.view(torch.uint8)
+            return fused_mla_decode_q_concat_kv_cache_insert(
+                ql_nope,
+                q_pe,
+                kv_c_normed,
+                k_pe,
+                cache,
+                slot_mapping,
+                ds_mla=True,
+                positions=positions,
+                cos_sin_cache=cos_sin_cache,
+            )
+        if is_quantized_kv_cache(self.kv_cache_dtype):
+            assert self.impl.supports_quant_query_input, (  # type: ignore[attr-defined]
+                "Kimi-K3 fp8 KV cache decode requires a backend that accepts an "
+                "fp8 (quantized) query input."
+            )
+            cache = self.kv_cache
+            if cache.dtype != torch.float8_e4m3fn:
+                cache = cache.view(torch.float8_e4m3fn)
+            return fused_mla_decode_q_concat_kv_cache_insert(
+                ql_nope,
+                q_pe,
+                kv_c_normed,
+                k_pe,
+                cache,
+                slot_mapping,
+                q_scale_inv=self._q_scale_inv,
+                cache_scale_inv=self._k_scale_inv,
+                positions=positions,
+                cos_sin_cache=cos_sin_cache,
+            )
+        return fused_mla_decode_q_concat_kv_cache_insert(
+            ql_nope,
+            q_pe,
+            kv_c_normed,
+            k_pe,
+            self.kv_cache,
+            slot_mapping,
+            positions=positions,
+            cos_sin_cache=cos_sin_cache,
+        )
+
+    def _compute_prefill_context(
+        self,
+        q: torch.Tensor,
+        attn_metadata: "MLACommonMetadata",
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Chunked-context prefill, K3-fused. Replaces the impl's version.
+
+        Per chunk the impl gathers the paged latent, up-projects it, then casts
+        and concatenates K (and casts V) in two or three more launches. Here that
+        tail is one fused kernel per chunk -- ``fused_mla_kv_concat`` for a bf16
+        query, ``fused_mla_kv_concat_quant_fp8`` when the query is fp8 -- reading
+        the strided ``kv_b_proj`` output in place and writing a contiguous key, so
+        only the gather and ``kv_b_proj`` remain.
+
+        The impl's query cast is gone as well: ``q`` already carries
+        ``prefill.q_data_type`` because the new-token epilogue quantized it. The
+        gathered latent still gets the impl's cast to whatever ``kv_b_proj``
+        consumes -- free (a no-op ``.to``) for a checkpoint whose ``kv_b_proj``
+        takes the fp8 latent directly, and required for a bf16 one, which is
+        what a stock K3 checkpoint carries. Its output is bf16 either way.
+
+        The gathered ``k_pe`` is likewise used as-is (fp8 for a plain fp8 cache)
+        and needs no RoPE: it was rotated on the way in.
+
+        Chunk partials are written straight into the accumulating context partial
+        when the prefill backend honors ``out``, so only the (64x smaller) lse is
+        copied per chunk.
+
+        Decode context parallelism keeps using
+        ``impl._context_parallel_compute_prefill_context``. Its NCCL fallback
+        retains the extra all-gather and reorganization; the direct symmetric
+        path publishes into the compact MLA layout instead.
+        """
+        prefill = attn_metadata.prefill
+        assert prefill is not None
+        prefill_backend = prefill.prefill_backend
+        assert prefill_backend is not None
+        chunked_context = prefill.chunked_context
+        assert chunked_context is not None
+        assert q.dtype == prefill.q_data_type, (
+            "Kimi-K3 chunked context expects the new-token epilogue to have "
+            f"produced a {prefill.q_data_type} query; got {q.dtype}."
+        )
+
+        fp8_prefill = q.dtype == current_platform.fp8_dtype()
+        kv_cache = self._attn_read_kv_cache()
+        kv_b_proj_input_dtype = _get_kv_b_proj_input_dtype(self.kv_b_proj, fp8_prefill)
+
+        def project_context(kv_c_normed: torch.Tensor) -> torch.Tensor:
+            workspace = self.prefill_projection_workspace
+            weight = getattr(self.kv_b_proj, "weight", None)
+            if workspace is None or not isinstance(weight, torch.Tensor):
+                return self.kv_b_proj(kv_c_normed)[0]
+            rows = kv_c_normed.numel() // self.kv_lora_rank
+            projection = workspace.get(
+                rows,
+                self.num_local_heads * (self.qk_nope_head_dim + self.v_head_dim),
+                kv_c_normed.dtype,
+                kv_c_normed.device,
+            )
+            if projection is None:
+                return self.kv_b_proj(kv_c_normed)[0]
+            if not isinstance(self.kv_b_proj.quant_method, UnquantizedLinearMethod):
+                raise RuntimeError(
+                    "Kimi-K3 retained context projection requires an "
+                    "unquantized kv_b_proj"
+                )
+            if self.kv_b_proj.bias is not None or self.kv_b_proj.gather_output:
+                raise RuntimeError(
+                    "Kimi-K3 retained context projection requires a local, "
+                    "bias-free kv_b_proj"
+                )
+            torch.mm(
+                kv_c_normed.reshape(rows, self.kv_lora_rank),
+                weight.t(),
+                out=projection,
+            )
+            return projection
+
+        def attend_chunk(
+            chunk,
+            kv_c_normed: torch.Tensor,
+            k_pe: torch.Tensor,
+            out: torch.Tensor | None,
+            release=None,
+        ) -> tuple[torch.Tensor, torch.Tensor]:
+            if kv_b_proj_input_dtype is not None:
+                kv_c_normed = kv_c_normed.to(kv_b_proj_input_dtype)
+            kv_nope = project_context(kv_c_normed).view(
+                -1, self.num_local_heads, self.qk_nope_head_dim + self.v_head_dim
+            )
+            k_nope, v = kv_nope.split([self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+            if fp8_prefill:
+                k, v = fused_mla_kv_concat_quant_fp8(k_nope, k_pe, v)
+            else:
+                k = fused_mla_kv_concat(k_nope, k_pe)
+            if release is not None:
+                # The projection and the concat were the last reads of the
+                # gathered planes; the attention reads the packed key.
+                release()
+            attn_output, attn_lse = prefill_backend.run_prefill_context_chunk(
+                chunk=chunk, q=q[chunk.token_slice], k=k, v=v, out=out
+            )
+            assert out is None or attn_output.data_ptr() == out.data_ptr(), (
+                f"{prefill_backend.get_name()} reports supports_out() but did not "
+                "write the context chunk into the `out` it was given."
+            )
+            return attn_output, attn_lse
+
+        chunks = chunked_context.chunks
+        pipeline = self._context_gather_pipeline(chunked_context)
+        if pipeline is None:
+
+            def run_chunk(
+                chunk, out: torch.Tensor | None = None
+            ) -> tuple[torch.Tensor, torch.Tensor]:
+                kv_c_normed, k_pe = self._gather_context_latent(
+                    chunk, kv_cache, prefill, fp8_prefill
+                )
+                return attend_chunk(chunk, kv_c_normed, k_pe, out)
+
+        else:
+            # Window i + 1 is published while window i is projected and
+            # attended. Chunk order is the workspace's slot order, so the
+            # publish of each chunk is issued exactly once, in order. The
+            # loop below may drop the first chunk from `chunks`; the
+            # publication schedule indexes the full list.
+            all_chunks = chunks
+            pending: list[tuple[int, tuple[torch.Tensor, torch.Tensor]] | None] = [
+                None
+            ] * len(all_chunks)
+
+            def publish(index: int) -> None:
+                chunk = all_chunks[index]
+                pending[index] = pipeline.publish(
+                    lambda slot: self._gather_context_latent(
+                        chunk, kv_cache, prefill, fp8_prefill, buffer_slot=slot
+                    )
+                )
+
+            pipeline.begin()
+            publish(0)
+
+            def run_chunk(
+                chunk, out: torch.Tensor | None = None
+            ) -> tuple[torch.Tensor, torch.Tensor]:
+                index = chunk.index
+                assert all_chunks[index] is chunk
+                if index + 1 < len(all_chunks):
+                    publish(index + 1)
+                published = pending[index]
+                assert published is not None
+                pending[index] = None
+                slot, (kv_c_normed, k_pe) = published
+                pipeline.acquire(slot)
+                return attend_chunk(
+                    chunk,
+                    kv_c_normed,
+                    k_pe,
+                    out,
+                    release=lambda: pipeline.release(slot),
+                )
+
+        if len(chunks) == 1 and not chunked_context.empty_token_slices:
+            # One chunk covering every prefill token: its partial *is* the context
+            # partial, so it needs neither an accumulator nor a copy.
+            return run_chunk(chunks[0])
+
+        # A backend honoring `out` writes each chunk's partial straight into the
+        # accumulator, so the per-chunk output copy disappears -- and because that
+        # contract fixes the trailing shape, the accumulator can be sized before
+        # any chunk runs. Otherwise the shape is only knowable from a real partial,
+        # so the first chunk runs ahead of the loop and is copied in.
+        writes_out = prefill_backend.supports_out()
+        if writes_out:
+            assert prefill.output_dtype is not None
+            output = torch.empty(
+                (q.shape[0], self.num_local_heads, self.v_head_dim),
+                dtype=prefill.output_dtype,
+                device=q.device,
+            )
+            output_lse = torch.empty(
+                (self.num_local_heads, q.shape[0]),
+                dtype=torch.float32,
+                device=q.device,
+            )
+            neutralize_empty_context_partials(chunked_context, output, output_lse)
+        else:
+            attn_output, attn_lse = run_chunk(chunks[0])
+            output, output_lse = init_mla_context_partial(
+                chunked_context, attn_output, attn_lse, num_tokens=q.shape[0]
+            )
+            accumulate_mla_context_chunk(
+                chunks[0], attn_output, attn_lse, output, output_lse
+            )
+            chunks = chunks[1:]
+
+        for chunk in chunks:
+            # A continuation chunk's leading tokens have to be merged with the
+            # partial already sitting there, so it cannot write in place.
+            out = (
+                output[chunk.token_slice]
+                if writes_out and not chunk.is_continuation
+                else None
+            )
+            attn_output, attn_lse = run_chunk(chunk, out=out)
+            accumulate_mla_context_chunk(
+                chunk,
+                attn_output,
+                attn_lse,
+                output,
+                output_lse,
+                output_written=out is not None,
+            )
+        return output, output_lse
+
+    def _context_gather_pipeline(self, chunked_context) -> DCPKVGatherPipeline | None:
+        """The shared gather pipeline when the direct DCP publisher serves this
+        layer's chunked context and ``VLLM_K3_DCP_GATHER_PIPELINE`` is on."""
+        if self.dcp_world_size <= 1 or not envs.VLLM_K3_DCP_GATHER_PIPELINE:
+            return None
+        dcp_kv_gather = chunked_context.dcp_manager
+        if dcp_kv_gather is None or not dcp_kv_gather.use_direct_kv_gather:
+            return None
+        return get_dcp_kv_gather_pipeline(
+            chunked_context.workspace.device, dcp_kv_gather.kv_gather_slots
+        )
+
+    def _gather_context_latent(
+        self,
+        chunk,
+        kv_cache: torch.Tensor,
+        prefill,
+        fp8_prefill: bool,
+        buffer_slot: int | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Gather one chunk's paged context latent into the workspace.
+
+        Under DCP, gather the local paged shard and let the exact direct
+        publisher place every rank's valid rows straight into compact
+        request-major KV planes, into ``buffer_slot`` of the symmetric buffer
+        (the chunk's parity when None: the serial loop alternates two slots).
+        Non-DCP keeps the merged-row workspace layout.
+        """
+        chunked_context = prefill.chunked_context
+        assert chunked_context is not None
+        workspace = chunked_context.workspace
+        block_table = prefill.block_table[chunk.request_slice]
+        if self.dcp_world_size > 1:
+            dcp_kv_gather = chunked_context.dcp_manager
+            assert dcp_kv_gather is not None and dcp_kv_gather.use_direct_kv_gather
+            assert chunk.padded_local_cu_seq_lens is not None
+            assert chunk.padded_local_token_to_seq is not None
+            assert chunk.final_layout_dst_rows is not None
+            toks = chunk.num_local_context_tokens
+            if self.kv_cache_dtype == "fp8_ds_mla":
+                ops.cp_gather_and_upconvert_fp8_kv_cache(
+                    src_cache=kv_cache,
+                    dst=workspace[:toks],
+                    block_table=block_table,
+                    workspace_starts=chunk.padded_local_cu_seq_lens,
+                    batch_size=chunk.num_requests,
+                    seq_starts=chunk.starts,
+                )
+            elif is_quantized_kv_cache(self.kv_cache_dtype):
+                ops.gather_and_maybe_dequant_cache(
+                    src_cache=kv_cache,
+                    dst=workspace,
+                    block_table=block_table,
+                    cu_seq_lens=chunk.padded_local_cu_seq_lens,
+                    token_to_seq=chunk.padded_local_token_to_seq,
+                    num_tokens=toks,
+                    kv_cache_dtype=self.kv_cache_dtype,
+                    scale=self._k_scale,
+                    seq_starts=chunk.starts,
+                )
+            else:
+                ops.cp_gather_cache(
+                    src_cache=kv_cache,
+                    dst=workspace,
+                    block_table=block_table,
+                    cu_seq_lens=chunk.padded_local_cu_seq_lens,
+                    batch_size=chunk.num_requests,
+                    seq_starts=chunk.starts,
+                )
+            return dcp_kv_gather.direct_kv_gather(
+                workspace[:toks],
+                chunk.final_layout_dst_rows,
+                chunk.num_context_tokens,
+                chunk.index & 1 if buffer_slot is None else buffer_slot,
+            )
+
+        toks = chunk.num_context_tokens
+        if self.kv_cache_dtype == "fp8_ds_mla":
+            ops.cp_gather_and_upconvert_fp8_kv_cache(
+                src_cache=kv_cache,
+                dst=workspace[:toks],
+                block_table=block_table,
+                workspace_starts=chunk.cu_seq_lens,
+                batch_size=chunk.num_requests,
+                seq_starts=chunk.starts,
+            )
+        elif not fp8_prefill:
+            ops.gather_and_maybe_dequant_cache(
+                src_cache=kv_cache,
+                dst=workspace,
+                block_table=block_table,
+                cu_seq_lens=chunk.cu_seq_lens,
+                token_to_seq=chunk.token_to_seq,
+                num_tokens=toks,
+                kv_cache_dtype=self.kv_cache_dtype,
+                scale=self._k_scale,
+                seq_starts=chunk.starts,
+            )
+        else:
+            ops.cp_gather_cache(
+                src_cache=kv_cache,
+                dst=workspace[:toks],
+                block_table=block_table,
+                cu_seq_lens=chunk.cu_seq_lens,
+                batch_size=chunk.num_requests,
+                seq_starts=chunk.starts,
+            )
+        gathered = workspace[:toks]
+        return (
+            gathered[..., : self.kv_lora_rank],
+            gathered[..., self.kv_lora_rank :],
+        )
+
+    def _forward_prefill_fused(
+        self,
+        q: torch.Tensor,
+        kv_c_normed: torch.Tensor,
+        k_pe: torch.Tensor,
+        positions: torch.Tensor | None,
+        cos_sin_cache: torch.Tensor | None,
+        slot_mapping: torch.Tensor,
+        attn_metadata,
+        out: torch.Tensor,
+    ) -> None:
+        """Prefill using the fused key-concat + cache-insert kernel.
+
+        Replaces ``_concat_k_nope_k_pe`` and the prefill cache write with one
+        fused kernel launch, dispatched by cache dtype. Chunked context uses
+        this layer's fused packing loop for non-DCP and direct final-layout DCP;
+        only the NCCL rank-major fallback remains delegated to the impl.
+
+        Supported configs (K3 fp8 policy):
+          - bf16 cache        -> bf16 prefill query
+          - plain fp8 cache   -> bf16 or fp8 prefill query
+          - fp8_ds_mla cache  -> bf16 prefill query (656B per-tile self-scaled)
+        """
+        prefill = attn_metadata.prefill
+        has_context = prefill.chunked_context is not None
+        fp8_prefill = prefill.q_data_type == current_platform.fp8_dtype()
+
+        kv_nope = self.kv_b_proj(kv_c_normed)[0].view(
+            -1, self.num_local_heads, self.qk_nope_head_dim + self.v_head_dim
+        )
+        k_nope, v = kv_nope.split([self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+
+        if self.kv_cache_dtype == "fp8_ds_mla":
+            # fp8_ds_mla cache (656B, per-tile self-scaled); bf16 attention.
+            assert not fp8_prefill, (
+                "Kimi-K3 fp8_ds_mla uses a bf16 prefill query; fp8 prefill "
+                "query is not supported with fp8_ds_mla."
+            )
+            kv_cache = self.kv_cache
+            if kv_cache.dtype != torch.uint8:
+                kv_cache = kv_cache.view(torch.uint8)
+            k = fused_mla_key_concat_ds_mla_insert(
+                q,
+                k_nope,
+                k_pe,
+                kv_c_normed,
+                kv_cache,
+                slot_mapping,
+                positions,
+                cos_sin_cache,
+            )
+        elif is_quantized_kv_cache(self.kv_cache_dtype):
+            if fp8_prefill:
+                # Plain per-tensor FP8: quantize q/k/v unscaled and write the
+                # latent cache using its configured scale.
+                kv_cache = self.kv_cache
+                if kv_cache.dtype != torch.float8_e4m3fn:
+                    kv_cache = kv_cache.view(torch.float8_e4m3fn)
+                q, k, v = fused_mla_qkv_quant_kv_cache_fp8_insert(
+                    q,
+                    k_nope,
+                    k_pe,
+                    kv_c_normed,
+                    v,
+                    kv_cache,
+                    slot_mapping,
+                    self._one_scale,
+                    self._one_scale,
+                    self._one_scale,
+                    self._k_scale_inv,
+                    positions,
+                    cos_sin_cache,
+                )
+            else:
+                assert positions is None and cos_sin_cache is None, (
+                    "BF16 prefill with an FP8 cache is supported only for "
+                    "Kimi K3 NoPE attention."
+                )
+                k_pe_flat = k_pe.reshape(k_pe.shape[0], -1)
+                k = torch.cat(
+                    (
+                        k_nope,
+                        k_pe_flat[:, None, :].expand(-1, k_nope.shape[1], -1),
+                    ),
+                    dim=-1,
+                )
+                ops.concat_and_cache_mla(
+                    kv_c_normed,
+                    k_pe_flat,
+                    self.kv_cache,
+                    slot_mapping.flatten(),
+                    kv_cache_dtype=self.kv_cache_dtype,
+                    scale=self._k_scale,
+                )
+        else:
+            # Concat full K = [k_nope | k_pe] and insert [kv_c_normed | k_pe]
+            # into the paged cache for these prefill tokens, in one launch.
+            k = fused_mla_key_concat_kv_cache_insert(
+                q,
+                k_nope,
+                k_pe,
+                kv_c_normed,
+                self.kv_cache,
+                slot_mapping,
+                positions,
+                cos_sin_cache,
+            )
+
+        # When there is no chunked context, backends that honor `out` write the
+        # attention result straight into it, avoiding a slice+flatten+copy.
+        writes_out = not has_context and prefill.prefill_backend.supports_out()
+        output_prefill = prefill.prefill_backend.run_prefill_new_tokens(
+            q=q,
+            k=k,
+            v=v,
+            return_softmax_lse=has_context,
+            out=(
+                out.view(-1, self.num_local_heads, self.v_head_dim)
+                if writes_out
+                else None
+            ),
+        )
+
+        if has_context:
+            suffix_output, suffix_lse = output_prefill
+            out = out.view(-1, self.num_local_heads, self.v_head_dim)
+            # FlashAttention 2 pads Kimi-K3's 128-wide V to the 256-wide
+            # query/key head dimension. Preserve only the semantic V slice in
+            # caller-owned output storage before context attention allocates
+            # its equally large padded result. The merge kernel supports
+            # output aliasing its suffix input, so both padded results never
+            # need to be live at the same time.
+            out.copy_(suffix_output[..., : self.v_head_dim])
+            del output_prefill, suffix_output
+            dcp_kv_gather = prefill.chunked_context.dcp_manager
+            if self.dcp_world_size > 1 and not (
+                dcp_kv_gather is not None and dcp_kv_gather.use_direct_kv_gather
+            ):
+                context_output, context_lse = (
+                    self.impl._context_parallel_compute_prefill_context(  # type: ignore[attr-defined]
+                        q,
+                        self._attn_read_kv_cache(),
+                        attn_metadata,
+                        k_scale=self._k_scale,
+                        dcp_world_size=self.dcp_world_size,
+                    )
+                )
+            else:
+                context_output, context_lse = self._compute_prefill_context(
+                    q, attn_metadata
+                )
+            compact_context_output = _reuse_consumed_query_for_context_output(q, out)
+            compact_context_output.copy_(context_output[..., : self.v_head_dim])
+            del context_output
+            merge_attn_states(
+                output=out,
+                prefix_output=compact_context_output,
+                prefix_lse=context_lse,
+                suffix_output=out,
+                suffix_lse=suffix_lse,
+            )
+        elif not writes_out:
+            out.copy_(output_prefill[..., : self.v_head_dim].flatten(start_dim=-2))

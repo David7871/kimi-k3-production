@@ -1,0 +1,113 @@
+services:
+  # COLOCATED DFlash K3 on the TP8 ranks, qualified fine1536 geometry.
+  # GPU0 idles. In-process DFlashSpeculator (no remote RPC). Draft KV is
+  # excluded from LMCache (interior-padded views).
+  kimi-k3-production:
+    # 9-GPU remote-DFlash profile: TP8/DCP8 QSRT target on the eight Max-Q
+    # GPUs (buses 0c..1e), BF16 DFlash K7 draft on the dedicated 9th GPU via
+    # protocol-v2 ZMQ loopback. Same 2.75 GiB/rank KV reservation as the
+    # qualified remote-DSpark 9-GPU profile (~1.12M tokens).
+    image: kimi-k3-production-issue75-dspark@sha256:f18184728c27959de26cf11952d7a8b96e57b513a6badf8bf3e09fd4cda16a76
+    container_name: kimi-k3-production
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    security_opt:
+      - label=disable
+    ulimits:
+      memlock: -1
+      stack: 67108864
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      CUDA_DEVICE_ORDER: PCI_BUS_ID
+      # Indices 1..8 = buses 0c,0d,10,11,19,1a,1d,1e (the validated TP8/DCP8
+      # rank order). Index 0 (bus 09) belongs to the draft container.
+      CUDA_VISIBLE_DEVICES: "1,2,3,4,5,6,7,8"
+      CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+      MODEL: /model
+      DRAFT_MODEL: /draft-model
+      PORT: "8090"
+      TP_SIZE: "8"
+      DCP_SIZE: "8"
+      SERVED_MODEL_NAME: Kimi-K3
+      MAX_MODEL_LEN: "372000"
+      # DFlash K3 scheduler geometry: 1,536 target slots + 2 x 2 lookahead.
+      # Depth reduced 7->3 (2026-08-27): positions 4-7 accepted only
+      # 0.060/0.022/0.007/0.000 — verify rows 8->4 per B1 step for nearly
+      # the same mean acceptance length.
+      DFLASH_K: "3"
+      MAX_NUM_BATCHED_TOKENS: "1540"
+      MAX_NUM_SCHEDULED_TOKENS: "1536"
+      MAX_NUM_SEQS: "2"
+      # Colocation on the qualified 1536 geometry: 0.75 GiB funds the
+      # TP8-sharded DFlash draft (0.61 GiB weights) + the in-process aux
+      # transients (~170 MiB at 1540-token steps; the fine3072 variant's
+      # ~380 MiB aux is why big-chunk colocation OOMs without vllm#473).
+      KV_CACHE_MEMORY_BYTES: "2147483648"
+      GPU_MEMORY_UTILIZATION: "0.985"
+      MAMBA_BLOCK_SIZE: "1536"
+      PREFIX_MATCH_UNIT: "1536"
+      ENABLE_VISION: "0"
+      VLLM_DCP_SHARD_DRAFT: "0"
+      B12X_MOE_WORKSPACE_TOKEN_LIMIT: "4096"
+      B12X_W4A16_STABLE_ROUTE_PACK: "1"
+      B12X_W4A16_PREFILL_FUSED_SUM: "1"
+      VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE: "0"
+      VLLM_COMPUTE_NANS_IN_LOGITS: "1"
+      # ws8 target keeps the tuned FlashInfer PCIe IPC all-reduce. B1 DFlash
+      # verification uses eight rows; B2's 16 rows use the larger-collective
+      # fallback (2026-08-23 qualification).
+      KIMI_PCIE_ALLREDUCE_BACKEND: flashinfer-ipc
+      FLASHINFER_AUTOTUNE_DIR: /opt/pcie-pr-audit/autotune
+      VLLM_PCIE_ONESHOT_ALLREDUCE_MAX_SIZE: "112KB"
+      VLLM_PCIE_ONESHOT_FUSED_ADD_RMS_NORM_MAX_SIZE: "112KB"
+      VLLM_SERVER_DEV_MODE: "1"
+      # Fine-object protocol: 1,536 global tokens per LMCache object. NEW
+      # producer namespace: DFlash K7 changes the speculative lifecycle and
+      # rollback depth; never share namespaces across serving-stack changes
+      # (2026-08-21 poisoning lesson).
+      LMCACHE_MODE: disk
+      LMCACHE_TRANSFER_MODE: engine_driven
+      LMCACHE_EXPECTED_SOURCE_ROOT: /opt/infernal-invocation/lmcache
+      LMCACHE_SEPARATE_OBJECT_GROUPS: "1"
+      LMCACHE_SERVER_ENV: "CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY PYTHONPATH=/opt/infernal-invocation/b12x:/opt/infernal-invocation/vllm"
+      LMCACHE_SHM_NAME: kimik3_tp8coloc_dflash3_fine1536_l1_48g_v1
+      LMCACHE_CHUNK_SIZE: "1536"
+      LMCACHE_L1_INIT_GB: "48"
+      LMCACHE_L1_GB: "48"
+      LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT: "1"
+      LMCACHE_L2_PATH: /lmcache/l2
+      LMCACHE_L2_GB: "512"
+      LMCACHE_L2_WORKERS: "4"
+      LMCACHE_MAX_GPU_WORKERS: "8"
+      LMCACHE_MAX_CPU_WORKERS: "4"
+      LMCACHE_PORT: "5555"
+      LMCACHE_HTTP_PORT: "8088"
+      LMCACHE_START_TIMEOUT: "120"
+      LMCACHE_LOG: /tmp/lmcache-mp-8090.log
+      LMCACHE_HEARTBEAT_INTERVAL: "5"
+      LMCACHE_WORKER_REAP_TIMEOUT: "120"
+      LMCACHE_WORKER_REGISTRATION_GRACE: "86400"
+      LMCACHE_KV_LOAD_FAILURE_POLICY: recompute
+    volumes:
+      - /mnt/models/Kimi-K3-QSRT-K2:/model:ro
+      - /mnt/models/Kimi-K3-DFlash:/draft-model:ro
+      - /mnt/models/kimi-k3-production-cache:/cache:rw
+      - /home/g0san/kimi-k3-production/autotune/pcie_ipc_all_reduce_ws8.json:/opt/pcie-pr-audit/autotune/pcie_ipc_all_reduce_ws8.json:ro
+      - /mnt/lmcache-l2/kimik3/l2-tp8coloc-dflash3-fine1536-v1:/lmcache/l2:rw
+      - /home/g0san/kimi-k3-production/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh:/usr/local/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh:ro
+      - /home/g0san/kimi-k3-production/bin/serve-kimi-k3-issue75-dflash-k7-dcp8.sh:/usr/local/bin/serve-kimi-k3-issue75-dflash-k7-dcp8.sh:ro
+      - /home/g0san/kimi-k3-production/bin/entrypoint-issue75-remote-dflash-k7-dcp8.sh:/usr/local/bin/entrypoint-issue75-remote-dflash-k7-dcp8.sh:ro
+      - /home/g0san/kimi-k3-production/bin/patch-lmcache-mla-only.py:/usr/local/bin/patch-lmcache-mla-only.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-kv-connector-skip-dflash-draft-tp9.py:/usr/local/bin/patch-kv-connector-skip-dflash-draft-tp9.py:ro
+    entrypoint:
+      - /usr/local/bin/entrypoint-issue75-remote-dflash-k7-dcp8.sh

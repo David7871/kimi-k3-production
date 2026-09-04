@@ -1,0 +1,42 @@
+# LMCache L2 (disk) eviction.
+#
+# The fs_native L2 adapter only tracks usage against LMCACHE_L2_GB; at the
+# cap it rejects every new store ("Rejected native L2 store ... capacity would
+# exceed") and never frees space, so once the directory fills, new prefixes
+# stop being persisted. overlays/lmcache-l2-eviction-20260902/lmcache-mp-wrapper.sh
+# adds an "eviction" block to the adapter JSON (LMCACHE_L2_EVICTION_POLICY /
+# _WATERMARK / _RATIO), which wires the adapter into the MP server's
+# L2EvictionController: above watermark x capacity it deletes ratio x (number
+# of objects) least-recently-used objects per pass (one pass per second).
+#
+# overlays/lmcache-l2-eviction-20260902/native_connector_l2_adapter.py carries
+# LMCache PR #37 (branch agent/kimi-k3-l2-lru-startup-order-20260902): the
+# startup directory scan is replayed newest-first so the LRU index seeds the
+# oldest object as the first victim (without it the first eviction after a
+# restart deletes the newest objects), and LMCache PR #41 (branch
+# agent/kimi-k3-l2-delete-protects-stores-20260902): delete() skips keys of
+# stores still in flight, so eviction cannot resurrect an object or inflate
+# the usage accounting.
+#
+# LMCACHE_L2_GB is raised from 2048 to 2457.6 (2.4 TiB) on the 3.0 TB
+# /mnt/lmcache-l2 array after the unused L2 directories of retired
+# configurations were removed (2026-09-02); the watermark 0.90 starts
+# eviction at ~2212 GiB.
+#
+# The wrapper mount must stay writable (see
+# candidates/k3-lmcache-evict-prefetch-20260902): the alias entrypoint
+# rewrites it in place on every start.
+# Rollback: drop this override (the evict-prefetch wrapper returns) or set
+# LMCACHE_L2_EVICTION_POLICY=noop.
+services:
+  kimi-k3-production:
+    environment:
+      LMCACHE_L2_GB: "2457.6"
+      LMCACHE_L2_EVICTION_POLICY: "LRU"
+      LMCACHE_L2_EVICTION_WATERMARK: "0.90"
+      LMCACHE_L2_EVICTION_RATIO: "0.05"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/lmcache-l2-eviction-20260902/lmcache-mp-wrapper.sh:/usr/local/bin/lmcache-mp-wrapper.sh
+      - /home/g0san/kimi-k3-production/overlays/lmcache-l2-eviction-20260902/native_connector_l2_adapter.py:/opt/infernal-invocation/lmcache/lmcache/v1/distributed/l2_adapters/native_connector_l2_adapter.py:ro
+    labels:
+      com.mydatacenter.lmcache-l2-eviction: kimi-k3-l2-lru-eviction-20260902

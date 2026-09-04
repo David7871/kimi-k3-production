@@ -1,0 +1,15 @@
+# Small-M MXFP8 dense linears quantize their activations inside the GEMM
+# (overlays/mxfp8-linear-fused-quant-20260902, b12x branch
+# agent/kimi-k3-mxfp8-linear-fused-quant-a-20260902-served, PR #288 on master):
+# for <= 8 tokens,
+# BF16 activations, unpadded K and 64-aligned N <= 4096 the dense projection
+# runs one GEMM (dense_gemm_fused_quant_a) instead of two scale fills + the
+# row quantizer + the GEMM. Bit-identical output (GPU 0 microbenchmark on
+# the Kimi-K3 projection shapes); ~1-1.5 ms per decode step at batch 8.
+# Rollback: drop this override, or B12X_MXFP8_LINEAR_FUSED_QUANT_A_MAX_N=0.
+services:
+  kimi-k3-production:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/mxfp8-linear-fused-quant-20260902/_kernel.py:/opt/infernal-invocation/b12x/b12x/gemm/mxfp8_linear/_kernel.py:ro
+    labels:
+      com.mydatacenter.mxfp8-linear-fused-quant: kimi-k3-mxfp8-linear-fused-quant-20260902

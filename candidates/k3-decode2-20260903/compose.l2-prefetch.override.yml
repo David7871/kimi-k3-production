@@ -1,0 +1,19 @@
+# Kimi-K3 L2 weight prefetch for decode (port of vLLM #586; branch
+# agent/kimi-k3-l2-prefetch-20260903, see overlays/l2-prefetch-20260903/README.md).
+# The next dense projection weights are prefetched into L2 on a side stream
+# inside each decoder layer's idle windows (after the first projection,
+# before the attention-output and MoE all-reduces). Cache hints only.
+# VLLM_K3_L2_PREFETCH=0 disables it on the same files.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_L2_PREFETCH: "1"
+      VLLM_K3_L2_PREFETCH_PERSIST_MB: "0"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/l2-prefetch-20260903/l2_prefetch.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/l2_prefetch.py:ro
+      - /home/g0san/kimi-k3-production/overlays/l2-prefetch-20260903/model.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/model.py:ro
+      - /home/g0san/kimi-k3-production/overlays/l2-prefetch-20260903/mla.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/mla.py:ro
+      - /home/g0san/kimi-k3-production/overlays/l2-prefetch-20260903/kda.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/kda.py:ro
+      - /home/g0san/kimi-k3-production/overlays/l2-prefetch-20260903/linear.py:/opt/infernal-invocation/vllm/vllm/model_executor/layers/linear.py:ro
+    labels:
+      com.mydatacenter.l2-prefetch: kimi-k3-l2-prefetch-20260903

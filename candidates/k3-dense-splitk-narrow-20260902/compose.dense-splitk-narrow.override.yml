@@ -1,0 +1,29 @@
+# Dense MXFP8 GEMM: exact split-K for narrow-N decode projections, and the
+# bf16-atomic split-K reduction switched off.
+#
+# overlays/dense-splitk-narrow-20260902/dense_gemm.py (b12x _lib/dense_gemm.py)
+# adds a split-K policy for tiny-M (<= 8), deep-K (>= 4096), narrow-N
+# (< 4096) FP8 projections: hidden -> latent, MLA q_a / kv_a, and the
+# shared-expert gate/up at TP8 otherwise launch n / tile_n CTAs and stream
+# weights at a third of HBM bandwidth. The widest slice count in {8, 4, 2}
+# that divides the K tiles and keeps every (tile, slice) CTA resident is
+# used; partials are reduced in FP32 in fixed slice order (one rounding).
+# GPU 0 real-shape measurements at M=4 (us): k7168 n1536 20.5 -> 12.7,
+# n896 20.0 -> 11.1, n576 19.4 -> 9.1, n2304 25.2 -> 17.2, n3584 25.1 -> 22.5.
+#
+# B12X_DENSE_SPLITK_TURBO=0 replaces the existing split-K's bf16 atomic
+# accumulation (two partials each rounded to bf16, then added: benchmark
+# check vs the FP32-accumulated reference max_abs 0.125, cos 0.9999957 at
+# k7168 n7168) with the same FP32 partial reduction (max_abs 0.0625,
+# cos 1.0); measured cost 0 (38.9 vs 38.9 us).
+# Rollback: drop this override (or B12X_DENSE_NARROW_SPLITK_MAX=1 and
+# B12X_DENSE_SPLITK_TURBO=1).
+services:
+  kimi-k3-production:
+    environment:
+      B12X_DENSE_NARROW_SPLITK_MAX: "8"
+      B12X_DENSE_SPLITK_TURBO: "0"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/dense-splitk-narrow-20260902/dense_gemm.py:/opt/infernal-invocation/b12x/b12x/_lib/dense_gemm.py:ro
+    labels:
+      com.mydatacenter.dense-splitk-narrow: kimi-k3-dense-splitk-narrow-exact-20260902

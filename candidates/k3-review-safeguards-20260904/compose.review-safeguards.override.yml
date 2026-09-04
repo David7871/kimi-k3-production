@@ -1,0 +1,26 @@
+# Bounds, ordering, and ownership safeguards for the remote DFlash draft path.
+# The target and draft server share one CUDA IPC export contract. The target
+# resolves pending replies before request-slot reuse, validates complete peer
+# allocation ranges, consumes out-of-place collectives, and disables the PCIe
+# DMA route unless every auxiliary allocation is peer-accessible. The draft
+# server reports ingest failures, defers replies until work completes, uses its
+# configured model geometry and load policy, and clears all smoke-test blocks.
+services:
+  kimi-k3-draft:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/review-safeguards-20260904/draft/k3_dspark_rpc.py:/opt/k3-dspark-3090/source/vllm/entrypoints/k3_dspark_rpc.py:ro
+      - /home/g0san/kimi-k3-production/overlays/review-safeguards-20260904/draft/p2p_transport.py:/opt/k3-dspark-3090/source/vllm/v1/worker/gpu/spec_decode/dspark/p2p_transport.py:ro
+      - /home/g0san/kimi-k3-production/overlays/review-safeguards-20260904/draft/k3_dspark_standalone.py:/opt/k3-dspark-3090/source/vllm/entrypoints/k3_dspark_standalone.py:ro
+      - /home/g0san/kimi-k3-production/overlays/review-safeguards-20260904/draft/dflash_utils.py:/opt/k3-dspark-3090/source/vllm/v1/worker/gpu/spec_decode/dflash/utils.py:ro
+    labels:
+      com.mydatacenter.review-safeguards: kimi-k3-review-safeguards-20260904
+  kimi-k3-production:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/review-safeguards-20260904/target/model_runner.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/model_runner.py:ro
+      - /home/g0san/kimi-k3-production/overlays/review-safeguards-20260904/target/remote_speculator.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/spec_decode/dspark/remote_speculator.py:ro
+      - /home/g0san/kimi-k3-production/overlays/review-safeguards-20260904/target/p2p_transport.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/spec_decode/dspark/p2p_transport.py:ro
+      - /home/g0san/kimi-k3-production/overlays/review-safeguards-20260904/target/custom_all_reduce.py:/opt/infernal-invocation/vllm/vllm/distributed/device_communicators/custom_all_reduce.py:ro
+      - /home/g0san/kimi-k3-production/overlays/review-safeguards-20260904/target/dspark_mla.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/dspark_mla.py:ro
+      - /home/g0san/kimi-k3-production/overlays/review-safeguards-20260904/target/w4a16_kernel.py:/opt/infernal-invocation/b12x/b12x/moe/_shared/kernels/w4a16/kernel.py:ro
+    labels:
+      com.mydatacenter.review-safeguards: kimi-k3-review-safeguards-20260904

@@ -1,0 +1,28 @@
+# W4A16 trellis MoE: 32-row route blocks for prefill-size launches.
+#
+# overlays/prefill-route-block32-20260902/kquant_hybrid.py adds a second
+# b12x W4A16 plan per MoE layer whose route geometry is 32 rows per block
+# (the image pins 8 rows for every launch). The fused kernel decodes an
+# expert's 2-bit trellis weights once per route block, so at 1,536 tokens
+# (avg 27 routed rows per expert) the 8-row geometry decodes each expert
+# about four times; the 32-row geometry decodes it once. Real-layer
+# measurement on one TP8 shard (research/prefill-w4a16-20260902/logs):
+# 7.5 ms -> 2.9 ms per layer at 1,536 tokens, bitwise-identical outputs.
+# Launches of at most VLLM_KQUANT_W4A16_PREFILL_MIN_M tokens (default 256,
+# above every CUDA-graph capture size) keep the 8-row decode plan.
+#
+# Cost: one extra ~420 MiB scratch buffer per rank, allocated during the
+# startup profile run (KV cache budget shrinks by that amount), and one
+# extra kernel specialization compiled on first boot (cached under
+# B12X_COMPILE_CACHE_DIR afterwards).
+#
+# Rollback: drop this override, or set VLLM_KQUANT_W4A16_PREFILL_BLOCK_M=0.
+services:
+  kimi-k3-production:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/prefill-route-block32-20260902/kquant_hybrid.py:/opt/infernal-invocation/vllm/vllm/model_executor/layers/quantization/kquant_hybrid.py:ro
+    environment:
+      VLLM_KQUANT_W4A16_PREFILL_BLOCK_M: "32"
+      VLLM_KQUANT_W4A16_PREFILL_MIN_M: "256"
+    labels:
+      com.mydatacenter.prefill-route-block32: kimi-k3-w4a16-prefill-route-block32-20260902

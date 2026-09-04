@@ -1,0 +1,9 @@
+# Diagnostic: per-layer self-check of the exact split's key stash
+# (VLLM_K3_UBATCH_STASH_CHECK, see overlays/ubatch-prefill-20260902/mla.py
+# _split_stash_self_check). Logs one line per MLA layer and rank on every
+# split forward; not for serving.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_UBATCH_STASH_CHECK: "1"
+      VLLM_K3_UBATCH_STASH_DUMP: "/cache/split-dump"

@@ -1,0 +1,13 @@
+# Memoized b12x TP-MoE execution planning for prefill.
+# Replaces the mxfp8-entry _impl.py mount with the same file plus the
+# kimi-k3-moe-plan-cache patch (overlays/prefill-plan-cache-20260901/).
+# Rollback: recreate kimi-k3-production without this override file.
+services:
+  kimi-k3-production:
+    environment:
+      # 0 disables the plan cache without removing the mount.
+      B12X_MOE_PLAN_CACHE_SIZE: "8192"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/prefill-plan-cache-20260901/b12x_fused_moe_impl.py:/opt/infernal-invocation/b12x/b12x/moe/fused_moe/_impl.py:ro
+    labels:
+      com.mydatacenter.moe-plan-cache: kimi-k3-moe-plan-cache-20260901

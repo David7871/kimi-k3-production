@@ -1,0 +1,12 @@
+# Background three-phase LMCache store for the hybrid (multi-group) KV layout.
+# overlays/lmcache-async-store-20260901/async_engine_driven.py = container file
+# plus the kimi-k3-async-multigroup-store patch. Rollback: drop this file or
+# set LMCACHE_ASYNC_MULTIGROUP_STORE=0.
+services:
+  kimi-k3-production:
+    environment:
+      LMCACHE_ASYNC_MULTIGROUP_STORE: "1"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/lmcache-async-store-20260901/async_engine_driven.py:/opt/infernal-invocation/lmcache/lmcache/v1/multiprocess/transfer_context/async_engine_driven.py:ro
+    labels:
+      com.mydatacenter.lmcache-async-store: kimi-k3-async-multigroup-store-20260901

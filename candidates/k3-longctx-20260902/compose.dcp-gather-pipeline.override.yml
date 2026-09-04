@@ -1,0 +1,30 @@
+# Pipelined DCP context-KV gather for chunked prefill (vLLM PR: branch
+# agent/kimi-k3-dcp-gather-pipeline-20260902-pr, on the rotated-gather
+# branch of PR #577). The served chunked-context loop stages and publishes
+# each 24,576-token context window on the compute stream, so the gather
+# (2.6 ms per window at 8 ranks, 288 ms of a 1.34 s chunk at 100k context,
+# linear in context) never overlaps the projection and attention of the
+# previous window. The Kimi-K3 loop now publishes window i + 1 on a side
+# stream while window i is projected and attended; the symmetric gather
+# workspace holds three slots (VLLM_DCP_KV_GATHER_SLOTS, +28 MiB per rank)
+# so a gather can run while the two preceding windows are still read. The
+# gather kernel, payload and layout are unchanged (byte-identical planes);
+# only the schedule differs.
+# Files: overlays/dcp-gather-pipeline-20260902/{mla.py,dcp_utils.py,envs.py}
+# and the rebuilt rotated-gather extension _C_k3ext.abi3.so (slot checks
+# generalized to the workspace's slot count; kernel body unchanged). They
+# replace the k3-prefill-sm120-20260901 mla.py/envs.py mounts and the
+# k3-dcp-gather-rotate-20260902 dcp_utils.py/_C_k3ext mounts.
+# VLLM_K3_DCP_GATHER_PIPELINE=0 restores the serial loop on the same files.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DCP_GATHER_PIPELINE: "1"
+      VLLM_DCP_KV_GATHER_SLOTS: "3"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/_C_k3ext.abi3.so:/opt/k3ext/_C_k3ext.abi3.so:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/dcp_utils.py:/opt/infernal-invocation/vllm/vllm/v1/attention/ops/dcp_utils.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/envs.py:/opt/infernal-invocation/vllm/vllm/envs.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/mla.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/mla.py:ro
+    labels:
+      com.mydatacenter.dcp-gather-pipeline: kimi-k3-dcp-gather-pipeline-20260902

@@ -1,0 +1,11 @@
+# Force the 64-row MMA tile for every dynamic (W4A8-MX prefill) MoE launch.
+# The default W4A8 ladder picks a 16-row tile below 897 tokens, whose kernel
+# regime costs 4.2-5.8 ms per layer versus 2.45 ms with the 64-row tile
+# (real-layer CUDA-graph replay, GPU 0, identical outputs). Decode uses the
+# W4A16 path and is unaffected. Rollback: drop this file.
+services:
+  kimi-k3-production:
+    environment:
+      B12X_DYNAMIC_TILE_MN: "64x128"
+    labels:
+      com.mydatacenter.moe-tail-tile: dynamic-tile-64x128-20260901

@@ -1,0 +1,8 @@
+# torch profiler enabled (rank 0 exports only, via patch-worker-profile-rank0-only).
+# Traces land in /cache/torch-profile (host: /mnt/models/kimi-k3-production-cache/torch-profile).
+# Trigger with POST /start_profile and /stop_profile. Remove this file for production runs.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_PROFILER_DIR: /cache/torch-profile
+      K3_PROFILE_RANK0_ONLY: "1"

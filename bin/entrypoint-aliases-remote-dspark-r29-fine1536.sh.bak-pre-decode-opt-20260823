@@ -1,0 +1,492 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Kimi-K3 r29 (upstream-aligned 20260821) remote-DSpark production image
+# LMCache operational patches. Runs before the packaged launcher on every
+# container start. All edits are idempotent: each block verifies its target
+# state and fails loudly if the packaged files drift from the expected anchors.
+
+# The packaged lmcache-mp-wrapper.sh hard-codes the retain prefetch policy and
+# does not bound concurrent prefetch jobs. Retain keeps every L2-prefetched
+# chunk resident in L1; overlapping long-prefix restores also multiply
+# temporary transfer buffers. Both conditions can grow the LMCache server far
+# beyond its 16 GiB L1 budget and trigger the kernel OOM killer. Use temporary
+# staging plus one in-flight prefetch by default.
+python3 - <<'PY'
+import os
+from pathlib import Path
+
+path = Path(os.environ.get("K3PATCH_WRAPPER", "/usr/local/bin/lmcache-mp-wrapper.sh"))
+old = "--l2-prefetch-policy retain"
+new = "--l2-prefetch-policy default"
+text = path.read_text()
+if new in text:
+    print(f"LMCache prefetch policy already patched: {new}")
+elif text.count(old) == 1:
+    path.write_text(text.replace(old, new, 1))
+    print(f"Applied LMCache prefetch policy patch: {old} -> {new}")
+else:
+    raise SystemExit(
+        f"ERROR: expected exactly one {old!r} in {path}, found {text.count(old)}"
+    )
+
+text = path.read_text()
+anchor = "--l2-prefetch-policy default"
+max_in_flight = (
+    '--l2-prefetch-max-in-flight '
+    '"${LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT:-1}"'
+)
+if max_in_flight in text:
+    print(f"LMCache prefetch concurrency already patched: {max_in_flight}")
+elif text.count(anchor) == 1:
+    path.write_text(text.replace(anchor, anchor + "\n  " + max_in_flight, 1))
+    print(f"Applied LMCache prefetch concurrency patch: {max_in_flight}")
+else:
+    raise SystemExit(
+        f"ERROR: expected exactly one {anchor!r} in {path}, "
+        f"found {text.count(anchor)}"
+    )
+PY
+
+# L1 TTLs. The packaged wrapper expires L1 entries 600s after write / 300s
+# after read, so any coding session paused for >10 minutes loses its L1
+# residency and falls back to coarse L2 disk chunks. L1 capacity is already
+# governed by the LRU eviction watermarks, so lengthen the TTLs to cover
+# realistic pauses. Worker registration grace is env-configurable in this
+# wrapper revision (LMCACHE_WORKER_REGISTRATION_GRACE, set to 86400 by the
+# outer launcher), so no file edit is needed for it.
+python3 - <<'PY'
+import os
+from pathlib import Path
+
+path = Path(os.environ.get("K3PATCH_WRAPPER", "/usr/local/bin/lmcache-mp-wrapper.sh"))
+text = path.read_text()
+
+def sub_once(text, old, new):
+    if new in text:
+        print(f"already patched: {new}")
+        return text
+    if text.count(old) != 1:
+        raise SystemExit(
+            f"ERROR: expected exactly one {old!r} in {path}, found {text.count(old)}"
+        )
+    print(f"applied: {old} -> {new}")
+    return text.replace(old, new, 1)
+
+text = sub_once(text, "--l1-write-ttl-seconds 600", "--l1-write-ttl-seconds 7200")
+text = sub_once(text, "--l1-read-ttl-seconds 300", "--l1-read-ttl-seconds 3600")
+path.write_text(text)
+PY
+
+# Inject an independent heartbeat PING timeout into the connector transfer
+# config the wrapper generates. The wrapper only emits heartbeat_interval;
+# the adapter-side decouple patch below reads heartbeat_timeout from
+# extra_config. Ambient LMCACHE_HEARTBEAT_TIMEOUT overrides the 30s default.
+python3 - <<'PY'
+import os
+from pathlib import Path
+
+path = Path(os.environ.get("K3PATCH_WRAPPER", "/usr/local/bin/lmcache-mp-wrapper.sh"))
+anchor = 'heartbeat_interval = float(os.environ["LMCACHE_JSON_HEARTBEAT_INTERVAL"])'
+addition = (
+    anchor
+    + '\nheartbeat_timeout = float(os.environ.get("LMCACHE_HEARTBEAT_TIMEOUT", "30"))'
+)
+json_anchor = '"lmcache.mp.heartbeat_interval": heartbeat_interval,'
+json_addition = (
+    json_anchor
+    + '\n                "lmcache.mp.heartbeat_timeout": heartbeat_timeout,'
+)
+
+text = path.read_text()
+if '"lmcache.mp.heartbeat_timeout"' in text:
+    print("wrapper already patched: heartbeat_timeout present")
+else:
+    if text.count(anchor) != 1:
+        raise SystemExit(
+            f"ERROR: expected exactly one heartbeat_interval assignment anchor, "
+            f"found {text.count(anchor)}"
+        )
+    if text.count(json_anchor) != 1:
+        raise SystemExit(
+            f"ERROR: expected exactly one heartbeat_interval JSON anchor, "
+            f"found {text.count(json_anchor)}"
+        )
+    text = text.replace(anchor, addition, 1)
+    text = text.replace(json_anchor, json_addition, 1)
+    path.write_text(text)
+    print("wrapper patched: heartbeat_timeout injected into transfer config")
+PY
+
+# Start each worker's per-instance LMCache heartbeat immediately after KV-cache
+# registration instead of lazily on the first store/retrieve. With the lazy
+# start, a fresh engine that idles past worker_registration_grace_seconds
+# without a chunk-sized request has its registrations reaped while still
+# healthy, and the next store crashes all workers (observed 2026-08-20 15:02
+# KST, full engine restart). Pinging from registration onward latches
+# has_liveness_signal and keeps last_seen fresh, so the reaper never targets
+# a live worker.
+python3 - <<'PY'
+import os
+from pathlib import Path
+
+path = Path(os.environ.get(
+    "K3PATCH_ADAPTER",
+    "/opt/infernal-invocation/lmcache/lmcache/integration/vllm/vllm_multi_process_adapter.py",
+))
+marker = "heartbeat-at-registration"
+anchor = '''        except TimeoutError:
+            raise ConnectionError(
+                "LMCache server did not respond to "
+                "register_kv_caches within "
+                f"{self._mq_timeout}s. Is the server running?"
+            ) from None
+'''
+insert = '''
+        # %s: a lazy (first store/retrieve) heartbeat lets the server reap a
+        # live but never-pinged registration after the grace window; the next
+        # PREPARE_STORE then raises and kills every worker. Ping from
+        # registration onward so the reaper never targets a live worker.
+        self._ensure_heartbeat_started()
+''' % marker
+
+text = path.read_text()
+if marker in text:
+    print(f"adapter already patched: {marker}")
+elif text.count(anchor) == 1:
+    path.write_text(text.replace(anchor, anchor + insert, 1))
+    print(f"applied adapter patch: {marker}")
+else:
+    raise SystemExit(
+        f"ERROR: expected exactly one register anchor in {path}, found {text.count(anchor)}"
+    )
+PY
+
+# Heartbeat PING timeout decouple (PR #4593 backport for this LMCache revision).
+#
+# The stock adapter couples the heartbeat PING response timeout to the
+# heartbeat interval, so any server busy spell longer than the interval — e.g.
+# a large external-cache restore with dynamic pinning, observed 2026-08-21
+# 13:31/17:29 KST — flips workers into degraded mode and back. Give the PING
+# an independent 30s timeout: bounded NORMAL-pool queue latency no longer
+# causes health flaps, while a genuinely dead server still degrades after 30s.
+# Source-matched adapter suite: 28 passed in a disposable container.
+python3 - <<'PY'
+import os
+from pathlib import Path
+
+ADAPTER = Path(os.environ.get(
+    "K3PATCH_ADAPTER",
+    "/opt/infernal-invocation/lmcache/lmcache/integration/vllm/vllm_multi_process_adapter.py",
+))
+MARKER = "heartbeat-timeout-decouple"
+
+
+def sub(text, old, new, count=1):
+    found = text.count(old)
+    if found != count:
+        raise SystemExit(
+            f"ERROR: expected {count} occurrence(s) of anchor {old[:70]!r}..., found {found}"
+        )
+    return text.replace(old, new, count)
+
+
+text = ADAPTER.read_text()
+if MARKER in text:
+    print(f"adapter already patched: {MARKER}")
+else:
+    # ExtraConfigDefault gains heartbeat_timeout (default 0.0 = legacy).
+    text = sub(
+        text,
+        "    # Interval (seconds) between periodic heartbeat pings\n"
+        "    # to the server.\n"
+        "    heartbeat_interval = 10.0\n",
+        "    # Interval (seconds) between periodic heartbeat pings\n"
+        "    # to the server.\n"
+        "    heartbeat_interval = 10.0\n"
+        "    # Timeout (seconds) for each heartbeat PING. Zero preserves the\n"
+        "    # historical behavior of using heartbeat_interval as the timeout.\n"
+        f"    # {MARKER}\n"
+        "    heartbeat_timeout = 0.0\n",
+    )
+    # Both adapters resolve heartbeat_timeout from extra_config.
+    text = sub(
+        text,
+        "            heartbeat_interval = cfg[ExtraConfigDefault.heartbeat_interval.name]\n",
+        "            heartbeat_interval = cfg[ExtraConfigDefault.heartbeat_interval.name]\n"
+        "            heartbeat_timeout = cfg[ExtraConfigDefault.heartbeat_timeout.name]\n",
+        count=2,
+    )
+    # Defaults when extra_config is None (scheduler, then worker).
+    text = sub(
+        text,
+        "        self.mq_clients: dict[str, MessageQueueClient] = {\n"
+        "            url: MessageQueueClient(url, context) for url in self._server_urls\n"
+        "        }\n",
+        "        self.mq_clients: dict[str, MessageQueueClient] = {\n"
+        "            url: MessageQueueClient(url, context) for url in self._server_urls\n"
+        "        }\n"
+        "        heartbeat_timeout = 0.0\n",
+    )
+    text = sub(
+        text,
+        "            legacy_block_size,\n"
+        "            mq_timeout,\n"
+        "        )\n"
+        "        if extra_config is not None:\n",
+        "            legacy_block_size,\n"
+        "            mq_timeout,\n"
+        "        )\n"
+        "        heartbeat_timeout = 0.0\n"
+        "        if extra_config is not None:\n",
+    )
+    # Both adapters store the resolved value.
+    text = sub(
+        text,
+        "        self._heartbeat_interval = heartbeat_interval\n",
+        "        self._heartbeat_interval = heartbeat_interval\n"
+        "        self._heartbeat_timeout = heartbeat_timeout\n",
+        count=2,
+    )
+    # HeartbeatThread accepts an independent timeout.
+    text = sub(
+        text,
+        "        interval: float = DEFAULT_HEARTBEAT_INTERVAL,\n"
+        "        instance_id: int | None = None,\n"
+        "    ):\n",
+        "        interval: float = DEFAULT_HEARTBEAT_INTERVAL,\n"
+        "        instance_id: int | None = None,\n"
+        "        timeout: float = 0.0,\n"
+        "    ):\n",
+    )
+    text = sub(
+        text,
+        "        self._interval = interval\n",
+        "        self._interval = interval\n"
+        "        # heartbeat_timeout > 0 decouples the PING response timeout from\n"
+        "        # the cadence; bounded queue latency must not flip health.\n"
+        "        self._effective_timeout = timeout if timeout > 0.0 else interval\n",
+    )
+    text = sub(
+        text,
+        "self._mq_client, timeout=self._interval, instance_id=self._instance_id",
+        "self._mq_client, timeout=self._effective_timeout, instance_id=self._instance_id",
+    )
+    # Both heartbeat creation sites pass the configured timeout.
+    text = sub(
+        text,
+        "                    interval=self._heartbeat_interval,\n"
+        "                )\n",
+        "                    interval=self._heartbeat_interval,\n"
+        "                    timeout=self._heartbeat_timeout,\n"
+        "                )\n",
+    )
+    text = sub(
+        text,
+        "                interval=self._heartbeat_interval,\n"
+        "                instance_id=self.instance_id,\n",
+        "                interval=self._heartbeat_interval,\n"
+        "                timeout=self._heartbeat_timeout,\n"
+        "                instance_id=self.instance_id,\n",
+    )
+    # Worker-side reap-floor warning accounts for the effective timeout.
+    old_warn = (
+        "        if 3 * heartbeat_interval > _SERVER_REAP_TIMEOUT_FLOOR_SECONDS:\n"
+        "            logger.warning(\n"
+        "                \"lmcache.mp.heartbeat_interval is %.1fs, so 3 x \"\n"
+        "                \"heartbeat_interval (%.1fs) exceeds the MP server's \"\n"
+        "                \"default worker reap timeout floor (%.1fs). Raise the \"\n"
+        "                \"server's worker reap timeout to at least 3 x the \"\n"
+        "                \"heartbeat interval, or the server may reap this \"\n"
+        "                \"worker between heartbeats.\",\n"
+        "                heartbeat_interval,\n"
+        "                3 * heartbeat_interval,\n"
+        "                _SERVER_REAP_TIMEOUT_FLOOR_SECONDS,\n"
+        "            )\n"
+    )
+    new_warn = (
+        "        effective_heartbeat_timeout = (\n"
+        "            heartbeat_timeout if heartbeat_timeout > 0.0 else heartbeat_interval\n"
+        "        )\n"
+        "        heartbeat_refresh_gap = max(\n"
+        "            3 * heartbeat_interval,\n"
+        "            heartbeat_interval + effective_heartbeat_timeout,\n"
+        "        )\n"
+        "        if heartbeat_refresh_gap > _SERVER_REAP_TIMEOUT_FLOOR_SECONDS:\n"
+        "            logger.warning(\n"
+        "                \"LMCache heartbeat refresh gap can reach %.1fs with \"\n"
+        "                \"heartbeat_interval=%.1fs and heartbeat_timeout=%.1fs, \"\n"
+        "                \"which exceeds the MP server's default worker reap \"\n"
+        "                \"timeout floor (%.1fs). Raise the server's worker reap \"\n"
+        "                \"timeout above the refresh gap, or the server may reap \"\n"
+        "                \"this worker between heartbeats.\",\n"
+        "                heartbeat_refresh_gap,\n"
+        "                heartbeat_interval,\n"
+        "                effective_heartbeat_timeout,\n"
+        "                _SERVER_REAP_TIMEOUT_FLOOR_SECONDS,\n"
+        "            )\n"
+    )
+    text = sub(text, old_warn, new_warn)
+    compile(text, str(ADAPTER), "exec")
+    ADAPTER.write_text(text)
+    print(f"adapter patched: {MARKER}")
+PY
+
+# The immutable child image carries both explicit token geometry and fine
+# 1,536-token external-object projection. Assert the complete semantic contract
+# after the heartbeat/runtime patches above; do not mutate cache geometry here.
+python3 - <<'PY'
+import os
+import py_compile
+from pathlib import Path
+
+paths = {
+    "adapter": Path(os.environ.get(
+        "K3PATCH_ADAPTER",
+        "/opt/infernal-invocation/lmcache/lmcache/integration/vllm/vllm_multi_process_adapter.py",
+    )),
+    "connector": Path(os.environ.get(
+        "K3PATCH_CONNECTOR",
+        "/opt/infernal-invocation/lmcache/lmcache/integration/vllm/lmcache_mp_connector.py",
+    )),
+    "group_view": Path(os.environ.get(
+        "K3PATCH_GROUP_VIEW",
+        "/opt/infernal-invocation/lmcache/lmcache/v1/multiprocess/group_view.py",
+    )),
+    "worker": Path(os.environ.get(
+        "K3PATCH_WORKER_TRANSFER",
+        "/opt/infernal-invocation/lmcache/lmcache/v1/multiprocess/transfer_context/worker_transfer.py",
+    )),
+    "vllm_mamba_manager": Path(os.environ.get(
+        "K3PATCH_VLLM_MAMBA_MANAGER",
+        "/opt/infernal-invocation/vllm/vllm/v1/core/single_type_kv_cache_manager.py",
+    )),
+    "vllm_scheduler": Path(os.environ.get(
+        "K3PATCH_VLLM_SCHEDULER",
+        "/opt/infernal-invocation/vllm/vllm/v1/core/sched/scheduler.py",
+    )),
+}
+texts = {name: path.read_text() for name, path in paths.items()}
+checks = {
+    "adapter_explicit_chunk_forward": texts["adapter"].count(
+        "tokens_per_chunk=self.lmcache_tokens_per_chunk"
+    ),
+    "adapter_multigroup_groupwise_guard": texts["adapter"].count(
+        "and len(self.engine_group_infos) <= 1"
+    ),
+    "connector_fine_slices": texts["connector"].count(
+        "external_chunk_size=lmcache_tokens_per_chunk"
+    ),
+    "connector_geometry_validation": texts["connector"].count(
+        "validate_external_chunk_geometry("
+    ),
+    "group_view_geometry_definition": texts["group_view"].count(
+        "def validate_external_chunk_geometry("
+    ),
+    "group_view_fine_slice_argument": texts["group_view"].count(
+        "external_chunk_size: int | None = None"
+    ),
+    "worker_chunk_annotations": texts["worker"].count(
+        "tokens_per_chunk: int | None = None"
+    ),
+    "worker_explicit_chunk_calculation": texts["worker"].count(
+        "chunk_tokens = (\n"
+        "            tokens_per_chunk\n"
+        "            if tokens_per_chunk is not None\n"
+        "            else blocks_in_chunk * block_size\n"
+        "        )"
+    ),
+    "worker_external_chunk_state": texts["worker"].count(
+        "self._external_chunk_size = chunk_tokens"
+    ),
+    "worker_resolve_geometry": texts["worker"].count(
+        "def resolve_external_chunk_group_geometry("
+    ),
+    "worker_subblock_view": texts["worker"].count(
+        "def make_external_subblock_view("
+    ),
+    "worker_block_projection": texts["worker"].count(
+        "def project_external_chunk_block_ids("
+    ),
+    "worker_skip_projection": texts["worker"].count(
+        "def project_external_chunk_skip_tokens("
+    ),
+    "vllm_running_state_markers": texts["vllm_mamba_manager"].count(
+        "self._allocated_block_reqs.add(request_id)"
+    ),
+    "vllm_dspark_cache_policy": texts["vllm_scheduler"].count(
+        "def use_eagle_for_target_cache("
+    ),
+    "vllm_dspark_cache_wiring": texts["vllm_scheduler"].count(
+        "use_eagle=self.use_eagle_for_target_cache"
+    ),
+    "vllm_grammar_spec_width_collection": texts["vllm_scheduler"].count(
+        "num_spec_tokens = [\n"
+        "            len(scheduler_output.scheduled_spec_decode_tokens.get(req_id, ()))\n"
+        "            for req_id in structured_output_request_ids\n"
+        "        ]"
+    ),
+    "vllm_grammar_spec_width_serialization": texts["vllm_scheduler"].count(
+        "return GrammarOutput(\n"
+        "            structured_output_request_ids,\n"
+        "            bitmask,\n"
+        "            num_spec_tokens,\n"
+        "        )"
+    ),
+    "vllm_grammar_commit_validation": texts["vllm_scheduler"].count(
+        "self.structured_output_manager.filter_speculative_grammar_tokens("
+    ),
+    "vllm_groupwise_load_recovery": texts["vllm_scheduler"].count(
+        "self.kv_cache_manager.get_block_ids_for_computed_tokens("
+    ),
+}
+expected = {
+    "adapter_explicit_chunk_forward": 1,
+    "adapter_multigroup_groupwise_guard": 1,
+    "connector_fine_slices": 2,
+    "connector_geometry_validation": 1,
+    "group_view_geometry_definition": 1,
+    "group_view_fine_slice_argument": 1,
+    "worker_chunk_annotations": 3,
+    "worker_explicit_chunk_calculation": 1,
+    "worker_external_chunk_state": 1,
+    "worker_resolve_geometry": 1,
+    "worker_subblock_view": 1,
+    "worker_block_projection": 1,
+    "worker_skip_projection": 1,
+    "vllm_running_state_markers": 2,
+    "vllm_dspark_cache_policy": 1,
+    "vllm_dspark_cache_wiring": 1,
+    "vllm_grammar_spec_width_collection": 1,
+    "vllm_grammar_spec_width_serialization": 1,
+    "vllm_grammar_commit_validation": 1,
+    "vllm_groupwise_load_recovery": 2,
+}
+if checks != expected:
+    raise SystemExit(
+        "ERROR: Kimi fine1536 semantic contract mismatch: "
+        f"observed={checks} expected={expected}"
+    )
+for path in paths.values():
+    py_compile.compile(str(path), doraise=True)
+print(f"Kimi fine1536 semantic contract verified: {checks}")
+PY
+
+if [[ "${K3PATCH_ONLY:-0}" == "1" ]]; then
+  echo "K3PATCH_ONLY=1: runtime patch preflight complete"
+  exit 0
+fi
+
+# The packaged remote-DSpark launcher already uses speculative depth 3.
+# Keep that production default unchanged while explicitly forwarding the
+# prefix-hash/match unit into the inner vLLM CLI.
+launcher="${K3PATCH_LAUNCHER:-/usr/local/bin/serve-kimi-k3-production-remote-dspark-r29}"
+launch_args=()
+if [[ -n "${PREFIX_MATCH_UNIT:-}" ]]; then
+  if [[ ! "${PREFIX_MATCH_UNIT}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: PREFIX_MATCH_UNIT must be a positive integer; got ${PREFIX_MATCH_UNIT}" >&2
+    exit 2
+  fi
+  launch_args+=(--prefix-match-unit "${PREFIX_MATCH_UNIT}")
+fi
+exec "${launcher}" "${launch_args[@]}" "$@"

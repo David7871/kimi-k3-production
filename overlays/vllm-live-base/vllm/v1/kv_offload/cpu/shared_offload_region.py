@@ -1,0 +1,406 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+import contextlib
+import errno
+import mmap
+import os
+import time
+from collections.abc import Callable
+
+import numpy as np
+import torch
+
+from vllm.distributed.device_communicators.shm_broadcast import (
+    check_shm_free_space,
+)
+from vllm.logger import init_logger
+from vllm.platforms import current_platform
+from vllm.v1.kv_offload.cpu.host_mem_ops import unregister_host_memory
+
+logger = init_logger(__name__)
+
+# MADV_POPULATE_WRITE was added in Linux 5.14 (value 23).
+_MADV_POPULATE_WRITE = getattr(mmap, "MADV_POPULATE_WRITE", 23)
+
+
+def _wait_for_file_size(fd: int, expected_size: int, timeout: float = 30.0) -> None:
+    """Spin-wait until the file reaches expected_size (creator truncated it)."""
+    deadline = time.monotonic() + timeout
+    while True:
+        if os.fstat(fd).st_size >= expected_size:
+            return
+        if time.monotonic() > deadline:
+            raise TimeoutError(
+                f"Timed out waiting for mmap file to reach {expected_size} bytes"
+            )
+        time.sleep(0.005)
+
+
+def _madvise_populate_write(mmap_obj: mmap.mmap, offset: int, length: int) -> None:
+    mmap_obj.madvise(_MADV_POPULATE_WRITE, offset, length)
+
+
+def _fallback_populate_write(mmap_obj: mmap.mmap, offset: int, length: int) -> None:
+    # Touch one byte per page via a read-modify-write so existing bytes are
+    # preserved — a peer worker may have already written KV data into this
+    # shared mmap by the time we run on a kernel without MADV_POPULATE_WRITE.
+    arr = np.frombuffer(mmap_obj, dtype=np.uint8)
+    arr[offset : offset + length : mmap.PAGESIZE] |= 0
+
+
+def _get_populate_write_fn(
+    mmap_obj: mmap.mmap,
+) -> Callable[[mmap.mmap, int, int], None]:
+    """Select the pre-faulting method once for this mmap."""
+    try:
+        _madvise_populate_write(mmap_obj, 0, mmap.PAGESIZE)
+    except OSError as e:
+        if e.errno != errno.EINVAL:
+            raise
+        logger.warning(
+            "MADV_POPULATE_WRITE is not supported; falling back to per-page "
+            "writes for mmap pre-population. Startup may be slower."
+        )
+        return _fallback_populate_write
+    return _madvise_populate_write
+
+
+class SharedOffloadRegion:
+    """
+    Single mmap-backed memory region shared across all workers for a
+    vLLM instance.  Workers coordinate via the filesystem: the first worker
+    to open the file with O_EXCL becomes the creator and calls ftruncate;
+    the rest open the existing file and wait until it reaches the expected
+    size.  Each worker then mmap()s the full file.
+
+    File path: /dev/shm/vllm_offload_{engine_id}.mmap
+    """
+
+    BLOCK_SIZE_ALIGNMENT: int = mmap.PAGESIZE
+
+    def __init__(
+        self,
+        engine_id: str,
+        num_blocks: int,
+        rank: int | None,
+        kv_bytes_per_block: int,
+        cpu_page_size: int,
+        *,
+        unlink_after_workers_map: bool = False,
+        num_workers: int | None = None,
+        worker_id: int | None = None,
+        prefault: bool = True,
+    ) -> None:
+        self.page_size = mmap.PAGESIZE
+        assert kv_bytes_per_block % self.page_size == 0
+        if unlink_after_workers_map:
+            if num_workers is None or num_workers <= 0:
+                raise ValueError(
+                    "num_workers must be positive when "
+                    "unlink_after_workers_map is enabled"
+                )
+            if rank is None:
+                raise ValueError(
+                    "rank must be set when unlink_after_workers_map is enabled"
+                )
+            worker_id = rank if worker_id is None else worker_id
+            if not 0 <= worker_id < num_workers:
+                raise ValueError(
+                    f"worker_id {worker_id} is outside num_workers={num_workers}"
+                )
+
+        self.num_blocks = num_blocks
+        self._row_stride = kv_bytes_per_block
+        self.total_size_bytes = self.num_blocks * self._row_stride
+
+        self.mmap_path = f"/dev/shm/vllm_offload_{engine_id}.mmap"
+        self._mapping_marker: str | None = None
+        self._creator = False  # set True only if this worker creates the file
+        self.fd: int | None = None
+        self.mmap_obj: mmap.mmap | None = None
+        self._base: torch.Tensor | None = None
+        self._views: list[torch.Tensor] = []
+        self._canonical_offset = 0
+        self._registered_host_ptrs: list[int] = []
+        self._host_register_segment_bytes: int | None = None
+        self.is_pinned: bool = False
+        self.rank = rank
+        if rank is not None:
+            # byte offset to this worker's first slot within each block row
+            self._worker_offset = rank * cpu_page_size
+            # exclusive upper bound for this worker's area within each row
+            self._worker_area_end = (rank + 1) * cpu_page_size
+        try:
+            try:
+                self.fd = os.open(
+                    self.mmap_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600
+                )
+            except FileExistsError:
+                self.fd = os.open(self.mmap_path, os.O_RDWR)
+                _wait_for_file_size(self.fd, self.total_size_bytes)
+                logger.info("Opened existing mmap file %s", self.mmap_path)
+            else:
+                # Mark ownership before sizing so constructor cleanup removes a
+                # zero-byte rendezvous file if either validation or ftruncate fails.
+                self._creator = True
+                check_shm_free_space(self.total_size_bytes)
+                os.ftruncate(self.fd, self.total_size_bytes)
+                logger.info(
+                    "Created mmap file %s (%.2f GB)",
+                    self.mmap_path,
+                    self.total_size_bytes / 1e9,
+                )
+
+            assert self.fd is not None
+            mmap_obj = mmap.mmap(
+                self.fd,
+                self.total_size_bytes,
+                flags=mmap.MAP_SHARED,
+                prot=mmap.PROT_READ | mmap.PROT_WRITE,
+            )
+            self.mmap_obj = mmap_obj
+
+            if unlink_after_workers_map:
+                assert num_workers is not None
+                assert worker_id is not None
+                self._unlink_after_worker_mappings(num_workers, worker_id)
+
+            if prefault:
+                populate_write_fn = _get_populate_write_fn(mmap_obj)
+                if rank is not None:
+                    # Populate only this worker's pages (one slot per block row).
+                    worker_offset = rank * cpu_page_size
+                    start = time.perf_counter()
+                    page_size = self.page_size
+                    for block in range(num_blocks):
+                        raw_offset = block * self._row_stride + worker_offset
+                        aligned_offset = (raw_offset // page_size) * page_size
+                        end = raw_offset + cpu_page_size
+                        aligned_length = end - aligned_offset
+                        populate_write_fn(mmap_obj, aligned_offset, aligned_length)
+                    logger.debug(
+                        "MADV_POPULATE_WRITE loop: %d blocks in %.3f s",
+                        num_blocks,
+                        time.perf_counter() - start,
+                    )
+                else:
+                    start = time.perf_counter()
+                    populate_write_fn(mmap_obj, 0, self.total_size_bytes)
+                    logger.debug(
+                        "MADV_POPULATE_WRITE entire region: %.3f s",
+                        time.perf_counter() - start,
+                    )
+
+            self._base = torch.frombuffer(memoryview(mmap_obj), dtype=torch.int8)
+        except BaseException:
+            self.cleanup()
+            raise
+
+    def _unlink_after_worker_mappings(
+        self,
+        num_workers: int,
+        worker_id: int,
+        timeout: float = 30.0,
+    ) -> None:
+        """Make the mmap anonymous after every worker has mapped the file.
+
+        The pathname is needed only while workers rendezvous during startup.
+        Once every rank owns a mapping, unlinking is safe: POSIX keeps the
+        pages alive until the last mapping closes and releases them even when
+        a worker is terminated before Python cleanup runs.
+
+        Raises:
+            TimeoutError: If not every worker publishes its mapping marker.
+        """
+        marker_prefix = f"{self.mmap_path}.mapped."
+        marker_path = f"{marker_prefix}{worker_id}"
+        marker_fd = os.open(marker_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        os.close(marker_fd)
+        self._mapping_marker = marker_path
+
+        # Worker 0 is the coordinator, independent of which worker created the
+        # backing file. Other workers can continue as soon as their mapping is
+        # established; worker 0 keeps the pathname available until all markers
+        # are visible.
+        if worker_id != 0:
+            return
+
+        marker_paths = [f"{marker_prefix}{rank}" for rank in range(num_workers)]
+        try:
+            deadline = time.monotonic() + timeout
+            while not all(os.path.exists(path) for path in marker_paths):
+                if time.monotonic() > deadline:
+                    missing = [
+                        path for path in marker_paths if not os.path.exists(path)
+                    ]
+                    raise TimeoutError(
+                        "Timed out waiting for worker mmap markers: "
+                        + ", ".join(missing)
+                    )
+                time.sleep(0.005)
+
+            try:
+                os.unlink(self.mmap_path)
+                logger.info(
+                    "Unlinked mmap file %s after %d workers mapped it",
+                    self.mmap_path,
+                    num_workers,
+                )
+            except FileNotFoundError:
+                pass
+        finally:
+            for path in marker_paths:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(path)
+            self._mapping_marker = None
+
+    def create_next_worker_view(self, tensor_page_size: int) -> torch.Tensor:
+        """Allocate a strided int8 view for this worker, one canonical tensor.
+
+        Must be called once per canonical tensor. The full mmap layout is:
+
+            worker0_block0 | worker1_block0 | ... | worker{M-1}_block0
+            worker0_block1 | worker1_block1 | ... | worker{M-1}_block1
+            ...
+
+        Each worker_block cell is cpu_page_size bytes and holds all canonical
+        tensors for that worker and block concatenated:
+            [ tensor0_data | tensor1_data | ... | tensor{L-1}_data ]
+
+        Consecutive rows are separated by row_stride = cpu_page_size * M.
+
+        Returns an int8 tensor of shape (num_blocks, tensor_page_size) with stride
+        (row_stride, 1).  Using int8 keeps stride == bytes, so swap_blocks
+        address arithmetic works without any dtype conversion.
+
+        Args:
+            tensor_page_size: Bytes per block for this  tensor.
+        """
+        assert self.rank is not None
+        assert self._base is not None
+        new_offset = self._worker_offset + tensor_page_size
+        assert new_offset <= self._worker_area_end, (
+            f"Worker offset {new_offset} exceeds worker area end "
+            f"{self._worker_area_end} (overflowed by "
+            f"{new_offset - self._worker_area_end} bytes)"
+        )
+        worker_layer_view = torch.as_strided(
+            self._base,
+            size=(self.num_blocks, tensor_page_size),
+            stride=(self._row_stride, 1),
+            storage_offset=self._worker_offset,
+        )
+        self._worker_offset = new_offset
+        self._views.append(worker_layer_view)
+        return worker_layer_view
+
+    def create_next_canonical_view(self, tensor_page_size: int) -> torch.Tensor:
+        """Allocate a strided int8 view shared by all workers for one
+        canonical tensor (canonical layout).
+
+        Must be called once per canonical tensor, instead of
+        create_next_worker_view. The full mmap layout is:
+
+            |<-------- canonical area ------->|<-------- unused ------->|
+            |  all workers share this area    |                         |
+            |                                 |                         |
+            | [ canonical_t0 | canonical_t1 ] |                         |
+            | [ canonical_t0 | canonical_t1 ] |                         |
+            | [ canonical_t0 | canonical_t1 ] |                         |
+            ^                ^
+            _canonical_offset=0, then advances by each tensor's size
+
+        Each canonical_t{i} cell is that tensor's canonical page for the
+        block. Canonical areas are carved consecutively from the start of
+        each block row; consecutive rows are separated by row_stride. Every
+        worker gets the identical byte ranges and writes only its disjoint
+        bytes within them, as described by its canonical mappings — unlike
+        create_next_worker_view, which gives each worker a private
+        cpu_page_size slot per row.
+
+        The trailing unused bytes exist only when the canonical pages sum to
+        less than row_stride: page-alignment padding of the row, or
+        deduplication of KV replicated across workers (e.g. the MLA latent),
+        where one canonical copy replaces world_size worker copies.
+
+        Args:
+            tensor_page_size: Canonical bytes per block for this tensor.
+        """
+        assert self._base is not None
+        new_offset = self._canonical_offset + tensor_page_size
+        assert new_offset <= self._row_stride
+        view = torch.as_strided(
+            self._base,
+            size=(self.num_blocks, tensor_page_size),
+            stride=(self._row_stride, 1),
+            storage_offset=self._canonical_offset,
+        )
+        self._canonical_offset = new_offset
+        self._views.append(view)
+        return view
+
+    def create_kv_memoryview(self) -> memoryview:
+        """Return a zero-copy memoryview over the entire KV buffer.
+
+        Shape: (num_blocks, row_stride_bytes). Secondary tiers address
+        block *b* as ``view[b]``.
+        """
+        assert self._base is not None
+        kv_tensor = self._base.view(self.num_blocks, self._row_stride)
+        np_arr = kv_tensor.numpy()
+        assert np_arr.ctypes.data == self._base.data_ptr(), (
+            "view()/numpy() created a copy instead of sharing the mmap buffer; "
+            "secondary tiers require zero-copy access to primary KV data"
+        )
+        return memoryview(np_arr)
+
+    def cleanup(self) -> None:
+        if self.is_pinned and self._base is not None:
+            if current_platform.is_cuda_alike():
+                registered_ptrs = self._registered_host_ptrs or [self._base.data_ptr()]
+                for ptr in reversed(registered_ptrs):
+                    result = unregister_host_memory(ptr)
+                    if result != 0:
+                        logger.warning(
+                            "cudaHostUnregister failed for rank=%d ptr=%#x (code=%d)",
+                            self.rank,
+                            ptr,
+                            result,
+                        )
+            self.is_pinned = False
+        self._registered_host_ptrs.clear()
+        self._host_register_segment_bytes = None
+        # Release views before _base: each view holds a _base reference and a
+        # direct StorageImpl reference.  Freeing views first lets both refcounts
+        # drop so the storage (which holds the mmap_obj buffer export) is freed
+        # before mmap_obj.close() is called below.
+        if self._views is not None:
+            self._views.clear()
+        self._base = None
+        if self.mmap_obj:
+            try:
+                self.mmap_obj.close()
+            except Exception:
+                logger.warning("Failed to close mmap_obj", exc_info=True)
+            self.mmap_obj = None
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except Exception:
+                logger.warning("Failed to close fd %s", self.fd, exc_info=True)
+            self.fd = None
+        if self._mapping_marker is not None:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(self._mapping_marker)
+            self._mapping_marker = None
+        if self._creator and getattr(self, "mmap_path", None):
+            try:
+                os.unlink(self.mmap_path)
+                logger.info("Removed mmap file %s", self.mmap_path)
+            except FileNotFoundError:
+                pass
+            except Exception:
+                logger.warning(
+                    "Failed to unlink path %s", self.mmap_path, exc_info=True
+                )
+            self._creator = False

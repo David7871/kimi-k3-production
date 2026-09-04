@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# Serve lukealonso/Kimi-K3-QSRT-K2 with Inferact seven-token DSpark decode.
+# TP16/DCP8 is the default topology; TP_SIZE and DCP_SIZE select another
+# topology when the target and draft fit the selected GPUs.
+set -euo pipefail
+
+MODEL="${MODEL:-/root/.cache/huggingface/hub/models--lukealonso--Kimi-K3-QSRT-K2/snapshots/3b98114115f1d41ce7963ba346c3fca19918b0bd}"
+DRAFT_MODEL="${DRAFT_MODEL:-/root/.cache/huggingface/hub/models--Inferact--Kimi-K3-DSpark/snapshots/cf6b8244620e7ea4b0651d214f28e89eac75bed6}"
+PORT="${PORT:-8000}"
+TP_SIZE="${TP_SIZE:-16}"
+DCP_SIZE="${DCP_SIZE:-8}"
+KV_CACHE_MEMORY_BYTES="${KV_CACHE_MEMORY_BYTES:-2300000000}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-1048576}"
+MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-8}"
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.98}"
+SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-Kimi-K3-QSRT-K2-DSpark7-TP${TP_SIZE}-DCP${DCP_SIZE}}"
+
+if (( TP_SIZE < 1 || DCP_SIZE < 1 || TP_SIZE % DCP_SIZE != 0 )); then
+  printf 'TP_SIZE must be positive and divisible by DCP_SIZE: TP_SIZE=%s DCP_SIZE=%s\n' \
+    "${TP_SIZE}" "${DCP_SIZE}" >&2
+  exit 2
+fi
+
+required=(
+  "${MODEL}/model.safetensors.index.json"
+  "${DRAFT_MODEL}/model.safetensors"
+  /opt/kimi-k3-qsrt/vllm/vllm/__init__.py
+  /opt/kimi-k3-qsrt/b12x/b12x/attention/dense_mla/__init__.py
+)
+for path in "${required[@]}"; do
+  [[ -e "${path}" ]] || {
+    printf 'Required Kimi-K3 artifact is missing: %s\n' "${path}" >&2
+    exit 1
+  }
+done
+
+printf -v speculative_config \
+  '{"method":"dspark","model":"%s","num_speculative_tokens":7,"attention_backend":"B12X_MLA","kv_cache_dtype":"fp8","draft_sample_method":"greedy","rejection_sample_method":"block","quantization":"mxfp8","quantization_config":{"linear":"mxfp8","ignore":["re:.*fused_qkv_a_proj$"]}}' \
+  "${DRAFT_MODEL}"
+
+export HF_MODULES_CACHE="${HF_MODULES_CACHE:-/tmp/huggingface-modules}"
+export VLLM_SOURCE_OVERLAY_ACTIVE=1
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+export CUDA_MODULE_LOADING="${CUDA_MODULE_LOADING:-LAZY}"
+export CUDA_MODULE_DATA_LOADING="${CUDA_MODULE_DATA_LOADING:-LAZY}"
+export GLOO_SOCKET_IFNAME="${GLOO_SOCKET_IFNAME:-lo}"
+export VLLM_WORKER_MULTIPROC_METHOD="${VLLM_WORKER_MULTIPROC_METHOD:-spawn}"
+export VLLM_USE_V2_MODEL_RUNNER="${VLLM_USE_V2_MODEL_RUNNER:-1}"
+export VLLM_USE_BREAKABLE_CUDAGRAPH="${VLLM_USE_BREAKABLE_CUDAGRAPH:-1}"
+export VLLM_USE_B12X_MOE="${VLLM_USE_B12X_MOE:-1}"
+export B12X_MOE_FORCE_A16="${B12X_MOE_FORCE_A16:-1}"
+export B12X_MOE_WORKSPACE_TOKEN_LIMIT="${B12X_MOE_WORKSPACE_TOKEN_LIMIT:-2048}"
+export VLLM_ENABLE_PCIE_ALLREDUCE="${VLLM_ENABLE_PCIE_ALLREDUCE:-1}"
+# Kimi-K3 DCP profiles use the topology-aware B12X all-reduce and must not
+# inherit the generic C++ backend configured by the base image.
+export VLLM_PCIE_ALLREDUCE_BACKEND="${KIMI_PCIE_ALLREDUCE_BACKEND:-b12x}"
+export VLLM_PCIE_ONESHOT_SINGLE_CHANNEL="${VLLM_PCIE_ONESHOT_SINGLE_CHANNEL:-1}"
+export B12X_PCIE_ALLREDUCE_ALGORITHM="${B12X_PCIE_ALLREDUCE_ALGORITHM:-island_rs}"
+export VLLM_USE_B12X_DCP_A2A="${VLLM_USE_B12X_DCP_A2A:-1}"
+export VLLM_DCP_A2A_MAX_TOKENS="${VLLM_DCP_A2A_MAX_TOKENS:-8}"
+export VLLM_DCP_A2A_LARGE_BACKEND="${VLLM_DCP_A2A_LARGE_BACKEND:-ag_rs}"
+export VLLM_DCP_SHARD_DRAFT="${VLLM_DCP_SHARD_DRAFT:-0}"
+export VLLM_K3_KV_GROUP_SIZE="${VLLM_K3_KV_GROUP_SIZE:-6}"
+export VLLM_KIMI_SHARD_QKV_A="${VLLM_KIMI_SHARD_QKV_A:-1}"
+export VLLM_KIMI_USE_B12X_PROJECTION_GATHER="${VLLM_KIMI_USE_B12X_PROJECTION_GATHER:-1}"
+export VLLM_KIMI_USE_B12X_PAIRED_PROJECTION_GATHER="${VLLM_KIMI_USE_B12X_PAIRED_PROJECTION_GATHER:-1}"
+export VLLM_KIMI_USE_B12X_PAIRED_PROJECTION_TOPK="${VLLM_KIMI_USE_B12X_PAIRED_PROJECTION_TOPK:-1}"
+export VLLM_KIMI_FUSED_TOPK16="${VLLM_KIMI_FUSED_TOPK16:-1}"
+export VLLM_KIMI_K3_B12X_DSPARK_ARGMAX="${VLLM_KIMI_K3_B12X_DSPARK_ARGMAX:-1}"
+export VLLM_DSPARK_DRAFT_KV_WINDOW="${VLLM_DSPARK_DRAFT_KV_WINDOW:-32768}"
+export VLLM_DSPARK_COMPACT_ROPE="${VLLM_DSPARK_COMPACT_ROPE:-1}"
+export VLLM_DSPARK_SHARD_MARKOV_HEAD="${VLLM_DSPARK_SHARD_MARKOV_HEAD:-1}"
+export VLLM_DSPARK_CAPTURE_SHARDED_MARKOV="${VLLM_DSPARK_CAPTURE_SHARDED_MARKOV:-1}"
+export VLLM_DSPARK_REPLICATE_MARKOV_W1="${VLLM_DSPARK_REPLICATE_MARKOV_W1:-1}"
+export VLLM_MLA_CHUNKED_PREFILL_WORKSPACE_SIZE="${VLLM_MLA_CHUNKED_PREFILL_WORKSPACE_SIZE:-4096}"
+export B12X_PCIE_HIERARCHICAL_DEFERRED_CONSUMPTION="${B12X_PCIE_HIERARCHICAL_DEFERRED_CONSUMPTION:-1}"
+export B12X_PCIE_HIERARCHICAL_DOUBLE_BUFFER="${B12X_PCIE_HIERARCHICAL_DOUBLE_BUFFER:-0}"
+export B12X_PCIE_HIERARCHICAL_THREADS="${B12X_PCIE_HIERARCHICAL_THREADS:-256}"
+export B12X_PCIE_HIERARCHICAL_NANOSLEEP_CYCLES="${B12X_PCIE_HIERARCHICAL_NANOSLEEP_CYCLES:-24}"
+export B12X_PCIE_HIERARCHICAL_BF16X2="${B12X_PCIE_HIERARCHICAL_BF16X2:-1}"
+export B12X_PCIE_HIERARCHICAL_BF16X2_MAX_ELEMENTS="${B12X_PCIE_HIERARCHICAL_BF16X2_MAX_ELEMENTS:-7168}"
+export B12X_PCIE_DCP_THREADS="${B12X_PCIE_DCP_THREADS:-512}"
+export B12X_PCIE_DCP_BLOCK_LIMIT="${B12X_PCIE_DCP_BLOCK_LIMIT:-8}"
+export B12X_PCIE_KIMI_TOPK_THREADS="${B12X_PCIE_KIMI_TOPK_THREADS:-384}"
+export INSTANTTENSOR_COPY="${INSTANTTENSOR_COPY:-0}"
+export INSTANTTENSOR_BACKEND="${INSTANTTENSOR_BACKEND:-AIO}"
+export INSTANTTENSOR_BUFFER_SIZE="${INSTANTTENSOR_BUFFER_SIZE:-536870912}"
+export INSTANTTENSOR_MAX_FREE_MEM_USAGE="${INSTANTTENSOR_MAX_FREE_MEM_USAGE:-0.6}"
+export SAFETENSORS_FAST_GPU="${SAFETENSORS_FAST_GPU:-1}"
+unset NCCL_GRAPH_FILE
+
+exec /opt/venv/bin/python -m vllm.entrypoints.cli.main serve "${MODEL}" \
+  --served-model-name "${SERVED_MODEL_NAME}" \
+  --trust-remote-code \
+  --language-model-only \
+  --host 0.0.0.0 \
+  --port "${PORT}" \
+  --tensor-parallel-size "${TP_SIZE}" \
+  --decode-context-parallel-size "${DCP_SIZE}" \
+  --dcp-comm-backend a2a \
+  --dcp-kv-cache-interleave-size 1 \
+  --load-format instanttensor \
+  --moe-backend b12x \
+  --linear-backend b12x \
+  --attention-backend B12X_MLA \
+  --kda-prefill-backend triton \
+  --dtype bfloat16 \
+  --kv-cache-dtype fp8 \
+  --kv-cache-memory-bytes "${KV_CACHE_MEMORY_BYTES}" \
+  --max-model-len "${MAX_MODEL_LEN}" \
+  --max-num-batched-tokens "${MAX_NUM_BATCHED_TOKENS}" \
+  --max-num-seqs "${MAX_NUM_SEQS}" \
+  --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION}" \
+  --enable-chunked-prefill \
+  --no-enable-prefix-caching \
+  --speculative-config "${speculative_config}" \
+  --compilation-config '{"mode":0,"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"],"cudagraph_capture_sizes":[8,16,24,32,40,48,56,64],"pass_config":{"fuse_allreduce_rms":true}}' \
+  --generation-config vllm \
+  --reasoning-parser kimi_k3 \
+  --tool-call-parser kimi_k3 \
+  --enable-auto-tool-choice \
+  --attention-config.flash_attn_version=2 \
+  "$@"

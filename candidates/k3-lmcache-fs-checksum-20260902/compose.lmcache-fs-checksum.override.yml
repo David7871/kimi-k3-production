@@ -1,0 +1,14 @@
+# LMCache native filesystem connector with the object integrity trailer
+# (overlays/lmcache-fs-checksum-20260902, LMCache PR #40): CRC-32C + length
+# trailer verified on every L2 load, fsync before publish. A corrupted,
+# truncated or zero-filled object is a per-key load failure (a miss for the
+# chunk) instead of KV cache. Existing trailer-less objects keep loading.
+# Rollback: drop this override (objects with a trailer are 16 bytes longer
+# than their payload; the previous connector reads the payload length only,
+# so they remain loadable).
+services:
+  kimi-k3-production:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/lmcache-fs-checksum-20260902/lmcache_fs.cpython-312-x86_64-linux-gnu.so:/opt/venv/lib/python3.12/site-packages/lmcache/lmcache_fs.cpython-312-x86_64-linux-gnu.so:ro
+    labels:
+      com.mydatacenter.lmcache-fs-checksum: kimi-k3-fs-object-checksum-20260902

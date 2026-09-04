@@ -1,0 +1,33 @@
+# Dense-MLA split precision for Kimi-K3 decode (b12x PR #292, vLLM PR #595;
+# overlays/dense-mla-split-precision-20260903/README.md).
+# The dense MLA kernel stores each split's normalized partial output in bf16
+# before the merge, so a result merged from several splits is rounded twice
+# and a one-split result once. Two plan options, both selected here:
+#   - VLLM_K3_DENSE_MLA_SINGLE_SPLIT_CHUNKS=-1: a request whose live 64-token
+#     chunks fit one planned run (44 chunks = 2,816 local tokens = ~22.5k
+#     tokens of total context at DCP 8) is scanned by split 0 alone, exactly
+#     as the fixed-range kernel does -> bit-identical to it there; longer
+#     requests use the balanced ranges of b12x #291 (decode flat across
+#     0-128k context).
+#   - VLLM_K3_DENSE_MLA_PARTIAL_DTYPE=fp32: split partials kept exact, so
+#     merged results (only requests above the threshold) are rounded once:
+#     8-25 % lower fp64-relative error than the fixed-range kernel at
+#     2,817-131,072 local tokens. Partial scratch doubles (16 rows x 96 heads
+#     x 47 splits x 512 x 4 B = 148 MB).
+# Files replace the k3-longctx-20260901 mounts of dense_mla/{_forward,_kernel,
+# _scratch}.py and b12x_mla.py, add dense_mla/_merge.py, and replace the
+# dcp-gather-dma4 envs.py (same content plus the two variables).
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DENSE_MLA_PARTIAL_DTYPE: "fp32"
+      VLLM_K3_DENSE_MLA_SINGLE_SPLIT_CHUNKS: "-1"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/dense-mla-split-precision-20260903/_forward.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/_forward.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dense-mla-split-precision-20260903/_scratch.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/_scratch.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dense-mla-split-precision-20260903/_kernel.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/_kernel.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dense-mla-split-precision-20260903/_merge.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/_merge.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dense-mla-split-precision-20260903/b12x_mla.py:/opt/infernal-invocation/vllm/vllm/v1/attention/backends/mla/b12x_mla.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dense-mla-split-precision-20260903/envs.py:/opt/infernal-invocation/vllm/vllm/envs.py:ro
+    labels:
+      com.mydatacenter.dense-mla-split-precision: kimi-k3-dense-mla-split-precision-20260903

@@ -1,0 +1,25 @@
+# Prefill-size Kimi projection gathers over the B12X PCIe copy channel.
+#
+# Every 1,536-token prefill chunk issues ~209 tensor-parallel all-gathers of
+# small rank-sharded projections (the TP-sharded router logits per MoE
+# layer, the KDA decay projection f_a per KDA layer, and two MLA
+# projections per attention layer). gather_kimi_sharded_projection only
+# used the B12X channel for single-row decode inputs; prefill rows fell
+# back to NCCL's ring all-gather, which runs a 2-block grid for 240-470 us
+# per call (~0.08 s per chunk in the 2026-09-02 rank-0 trace).
+# overlays/projection-gather-prefill-20260902/tp_projection.py routes rows in
+# [32, VLLM_K3_B12X_PREFILL_GATHER_MAX_TOKENS] through the same head-gather
+# channel (rows -> batch, local width -> one head) with a pool planned for
+# that row capacity, eager streams only; dcp_alltoall.py lets that caller
+# bypass VLLM_DCP_A2A_MAX_TOKENS, which sizes the attention DCP pools.
+# The gather is a byte copy, so outputs are unchanged. Rollback: drop this
+# override or set VLLM_K3_B12X_PREFILL_GATHER_MAX_TOKENS=0.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_B12X_PREFILL_GATHER_MAX_TOKENS: "0"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/projection-gather-prefill-20260902/tp_projection.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/tp_projection.py:ro
+      - /home/g0san/kimi-k3-production/overlays/projection-gather-prefill-20260902/dcp_alltoall.py:/opt/infernal-invocation/vllm/vllm/v1/attention/ops/dcp_alltoall.py:ro
+    labels:
+      com.mydatacenter.projection-gather-prefill: kimi-k3-projection-gather-prefill-b12x-20260902

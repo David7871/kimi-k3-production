@@ -1,0 +1,19 @@
+# Piecewise (breakable) CUDA graphs for prefill-size batches. The served
+# build already runs Kimi-K3 with breakable CUDA graphs (attention and
+# KV-cache custom ops are eager break points, everything between them is
+# captured), but only for the decode capture sizes 1-16 tokens; a
+# 1,536-token prefill chunk runs fully eager and is bound by the worker
+# thread's launch cost (~1 s of host time per forward, report section 7b).
+# Adding prefill-size capture sizes lets the dispatcher run those chunks as
+# PIECEWISE graphs: the MoE launch chain, dense projections, norms and the
+# DMA ring all-reduces replay from graphs and only attention runs eagerly.
+# Batches between two sizes pad up to the next one, so the sizes are spaced
+# at 256 tokens to bound the tail-chunk padding waste.
+# Needs the serve script's K3_CUDAGRAPH_CAPTURE_SIZES hook
+# (candidates/all-compatible-20260829/runtime/serve-kimi-k3-compatible-sm120.sh).
+services:
+  kimi-k3-production:
+    environment:
+      K3_CUDAGRAPH_CAPTURE_SIZES: "1,2,4,8,16,256,512,768,1024,1280,1536"
+    labels:
+      com.mydatacenter.prefill-piecewise-graph: kimi-k3-prefill-piecewise-graph-20260902

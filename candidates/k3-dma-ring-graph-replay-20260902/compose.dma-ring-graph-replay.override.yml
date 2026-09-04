@@ -1,0 +1,21 @@
+# CUDA-graph replay of the b12x PCIe DMA ring all-reduce for eager
+# (prefill) calls. The eager ring driver issues ~250 CUDA API calls from
+# Python per all-reduce (2.4 ms of host time per call on this host; half of
+# the worker thread's time during a 1,536-token chunk), which is what
+# bounds prefill chunk throughput on the CPU side. With replay enabled a
+# shape at or above 8 MiB is captured once (on its second call) into a CUDA
+# graph over static buffers; later calls copy in, replay, copy out. Same
+# kernels in the same order: bit-identical results.
+# Overlay: overlays/dma-ring-graph-replay-20260902/pcie_dma.py
+# (b12x/comm/pcie/pcie_dma.py). Disable with B12X_PCIE_DMA_GRAPH_REPLAY=0.
+services:
+  kimi-k3-production:
+    environment:
+      B12X_PCIE_DMA_GRAPH_REPLAY: "1"
+      B12X_PCIE_DMA_GRAPH_REPLAY_MIN_BYTES: "8388608"
+      B12X_PCIE_DMA_GRAPH_REPLAY_MAX_ENTRIES: "4"
+      VLLM_K3_UBATCH_PREFILL: "0"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/dma-ring-graph-replay-20260902/pcie_dma.py:/opt/infernal-invocation/b12x/b12x/comm/pcie/pcie_dma.py:ro
+    labels:
+      com.mydatacenter.dma-ring-graph-replay: kimi-k3-dma-ring-graph-replay-20260902

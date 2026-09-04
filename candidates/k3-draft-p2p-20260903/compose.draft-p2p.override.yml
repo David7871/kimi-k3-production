@@ -1,0 +1,26 @@
+# Peer-memory draft transport (vLLM PR #608; overlays/draft-p2p-20260903/).
+# The target's rank 0 maps the draft server's context ring and reply slots
+# (CUDA IPC, cudaMalloc allocations on GPU 0) and moves the bulk payloads with
+# device copies over the PCIe fabric: context rows are pushed into a ring slot
+# before the proposal header, the top-k reply is pulled from a reply slot
+# behind the deferred-resolve gate. ZMQ carries headers, positions and tokens.
+# The target must enumerate GPU 0 (ninth visible device; ranks 0-7 keep their
+# indices); the draft container is unchanged apart from the RPC file.
+# VLLM_K3_DRAFT_P2P=0 restores the frame transport on the same files; any
+# handle-open or push failure also falls back to it (log line
+# "peer transport unavailable/disabled").
+services:
+  kimi-k3-draft:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/draft-p2p-20260903/k3_dspark_rpc.py:/opt/k3-dspark-3090/source/vllm/entrypoints/k3_dspark_rpc.py:ro
+    labels:
+      com.mydatacenter.draft-p2p: kimi-k3-draft-p2p-20260903
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DRAFT_P2P: "1"
+      CUDA_VISIBLE_DEVICES: "1,2,3,4,5,6,7,8,0"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/draft-p2p-20260903/remote_speculator.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/spec_decode/dspark/remote_speculator.py:ro
+      - /home/g0san/kimi-k3-production/overlays/draft-p2p-20260903/p2p_transport.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/spec_decode/dspark/p2p_transport.py:ro
+    labels:
+      com.mydatacenter.draft-p2p: kimi-k3-draft-p2p-20260903

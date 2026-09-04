@@ -1,0 +1,7 @@
+services:
+  kimi-k3-production:
+    image: kimi-k3-production-issue75-dspark@sha256:087276f1ec791909e71055d655eeadb3b35c246e46f2be21af9d210aa970a60b
+    volumes:
+      - /home/g0san/k3-longctx-vllm.m7bpUA/vllm/models/kimi_k3/nvidia/mla.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/mla.py:ro
+    labels:
+      com.mydatacenter.prefill-exact: rollback-c7fd9c8d2

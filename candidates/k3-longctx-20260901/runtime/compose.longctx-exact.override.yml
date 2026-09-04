@@ -1,0 +1,31 @@
+services:
+  kimi-k3-production:
+    image: kimi-k3-production-issue75-dspark:k3-prefill-1536-exact-20260901-r1
+    environment:
+      # Exact long-context path: graph-shape plan bank plus fused DFlash K=3
+      # verification. Query replication and quality-changing sparsity remain
+      # disabled until their separate VRAM/model-quality gates pass.
+      VLLM_DCP_Q_REPLICATE: "0"
+      VLLM_K3_DYNAMIC_SPARSE_STRIDE: "1"
+      B12X_COMPILE_CACHE_DIR: /cache/jit/k3-longctx-1a1af980-3689338/b12x/compile
+      B12X_CUTE_COMPILE_CACHE_DIR: /cache/jit/k3-longctx-1a1af980-3689338/b12x/cute
+      CUTE_DSL_CACHE_DIR: /cache/jit/k3-longctx-1a1af980-3689338/cute-dsl
+      CUDA_CACHE_PATH: /cache/jit/k3-longctx-1a1af980-3689338/cuda
+    volumes:
+      - /home/g0san/k3-longctx-vllm.m7bpUA/vllm/envs.py:/opt/infernal-invocation/vllm/vllm/envs.py:ro
+      - /home/g0san/k3-prefill-1536.iAz33F/vllm/vllm/models/kimi_k3/nvidia/mla.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/mla.py:ro
+      - /home/g0san/k3-longctx-vllm.m7bpUA/vllm/v1/attention/backends/mla/b12x_mla.py:/opt/infernal-invocation/vllm/vllm/v1/attention/backends/mla/b12x_mla.py:ro
+      - /home/g0san/k3-longctx-b12x.1rpYEz/b12x/attention/dense_mla/__init__.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/__init__.py:ro
+      - /home/g0san/k3-longctx-b12x.1rpYEz/b12x/attention/dense_mla/_forward.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/_forward.py:ro
+      - /home/g0san/k3-longctx-b12x.1rpYEz/b12x/attention/dense_mla/_kernel.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/_kernel.py:ro
+      - /home/g0san/k3-longctx-b12x.1rpYEz/b12x/attention/dense_mla/_reference.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/_reference.py:ro
+      - /home/g0san/k3-longctx-b12x.1rpYEz/b12x/attention/dense_mla/_scratch.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/_scratch.py:ro
+      - /home/g0san/k3-longctx-b12x.1rpYEz/b12x/attention/dense_mla/api.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/api.py:ro
+      - /home/g0san/k3-longctx-b12x.1rpYEz/b12x/attention/dense_mla/planner.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/planner.py:ro
+    labels:
+      com.mydatacenter.longctx-exact: graph-plan-bank-fused-q4
+      com.mydatacenter.vllm-longctx: 96789b501
+      com.mydatacenter.b12x-longctx-deploy: 3689338
+      com.mydatacenter.dynamic-sparse: implemented-disabled
+      com.mydatacenter.dcp-qrep: implemented-disabled-vram-gate
+      com.mydatacenter.prefill-exact: fixed1536-final-layout-pcie-fused-pack

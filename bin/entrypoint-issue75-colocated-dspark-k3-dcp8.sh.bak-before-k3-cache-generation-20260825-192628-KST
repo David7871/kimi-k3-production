@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Restore the issue-75 QSRT runtime with colocated Inferact DSpark K3 at TP8/DCP8.
+set -euo pipefail
+
+# Apply the already-qualified fine-cache, heartbeat, scheduler, AttnRes, and
+# grammar composition guards to the exact issue-75 source tree. Patch the
+# packaged depth-3 launcher only for its semantic gate; the K3 launcher below
+# is a separate read-only host artifact.
+K3PATCH_ONLY=1 \
+K3PATCH_INNER_LAUNCHER=/usr/local/bin/serve-kimi-k3-qsrt-dspark-r29 \
+  /usr/local/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh
+
+# The issue-75 image predates LMCache PR #4219. Kimi-K3 is hybrid MLA +
+# recurrent attention, so pure-MLA TP rank sharing would restore the wrong
+# recurrent shard on nonzero ranks. Apply and verify the source-compatible
+# classifier backport before any worker imports LMCache.
+python3 /usr/local/bin/patch-lmcache-mla-only.py
+
+# Model workers use the patched source trees. The standalone LMCache server gets
+# an explicit source-free PYTHONPATH below so it imports the full installed CLI.
+export PYTHONPATH="/opt/infernal-invocation/lmcache:/opt/infernal-invocation/b12x:/opt/infernal-invocation/vllm:/opt/venv/lib/python3.12/site-packages"
+
+export LMCACHE_MODE="${LMCACHE_MODE:-disk}"
+export LMCACHE_TRANSFER_MODE="${LMCACHE_TRANSFER_MODE:-engine_driven}"
+export LMCACHE_EXPECTED_SOURCE_ROOT="${LMCACHE_EXPECTED_SOURCE_ROOT:-/opt/infernal-invocation/lmcache}"
+export LMCACHE_SEPARATE_OBJECT_GROUPS="${LMCACHE_SEPARATE_OBJECT_GROUPS:-1}"
+export LMCACHE_SERVER_ENV="${LMCACHE_SERVER_ENV-CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY PYTHONPATH=/opt/infernal-invocation/b12x:/opt/infernal-invocation/vllm}"
+export LMCACHE_SHM_NAME="${LMCACHE_SHM_NAME:-kimik3_issue75_dcp8_k7_fine1536_l1_16g_v1}"
+export LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-1536}"
+export LMCACHE_L1_INIT_GB="${LMCACHE_L1_INIT_GB:-16}"
+export LMCACHE_L1_GB="${LMCACHE_L1_GB:-16}"
+export LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT="${LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT:-1}"
+export LMCACHE_L2_GB="${LMCACHE_L2_GB:-512}"
+export LMCACHE_L2_WORKERS="${LMCACHE_L2_WORKERS:-4}"
+export LMCACHE_MAX_GPU_WORKERS="${LMCACHE_MAX_GPU_WORKERS:-8}"
+export LMCACHE_MAX_CPU_WORKERS="${LMCACHE_MAX_CPU_WORKERS:-4}"
+export LMCACHE_PORT="${LMCACHE_PORT:-5555}"
+export LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8088}"
+export LMCACHE_START_TIMEOUT="${LMCACHE_START_TIMEOUT:-120}"
+export LMCACHE_LOG="${LMCACHE_LOG:-/tmp/lmcache-mp-8090.log}"
+export LMCACHE_HEARTBEAT_INTERVAL="${LMCACHE_HEARTBEAT_INTERVAL:-5}"
+export LMCACHE_WORKER_REAP_TIMEOUT="${LMCACHE_WORKER_REAP_TIMEOUT:-120}"
+export LMCACHE_WORKER_REGISTRATION_GRACE="${LMCACHE_WORKER_REGISTRATION_GRACE:-86400}"
+export LMCACHE_KV_LOAD_FAILURE_POLICY="${LMCACHE_KV_LOAD_FAILURE_POLICY:-recompute}"
+
+exec /usr/local/bin/lmcache-mp-wrapper.sh \
+  /usr/local/bin/serve-kimi-k3-issue75-dspark-k3-dcp8.sh

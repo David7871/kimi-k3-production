@@ -1,0 +1,22 @@
+# Full-depth external prefix restores under L1 pressure.
+# overlays/lmcache-evict-prefetch-20260902/lmcache-mp-wrapper.sh adds
+# --write-back-on-evict and --emergency-evict-for-prefetch to the LMCache MP
+# server flags: evicted L1 keys persist to L2 before deletion, and prefetch
+# may synchronously evict LRU victims when reserving space for an L2-to-L1
+# restore. Without these, cross-request external hits are trimmed to the L1
+# free headroom (observed 7680..32256 tokens instead of the full prefix).
+# Rollback: drop this override, or set LMCACHE_WRITE_BACK_ON_EVICT=0 /
+# LMCACHE_EMERGENCY_EVICT_FOR_PREFETCH=0.
+#
+# The mount must stay writable: bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh
+# rewrites /usr/local/bin/lmcache-mp-wrapper.sh in place on every container
+# start (idempotent prefetch-policy / TTL / heartbeat edits, unconditional
+# write_text). A read-only mount makes that rewrite fail with EROFS and the
+# container crash-loops before LMCache starts. The overlay file already
+# carries every edit, so the rewrite is byte-identical.
+services:
+  kimi-k3-production:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/lmcache-evict-prefetch-20260902/lmcache-mp-wrapper.sh:/usr/local/bin/lmcache-mp-wrapper.sh
+    labels:
+      com.mydatacenter.lmcache-evict-prefetch: kimi-k3-l1-prefetch-emergency-evict-20260902

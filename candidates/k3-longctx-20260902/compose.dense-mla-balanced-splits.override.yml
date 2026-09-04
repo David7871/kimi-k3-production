@@ -1,0 +1,21 @@
+# Balanced dense-MLA split ranges for long-context decode (b12x PR #291,
+# vLLM PR #587). The served kernel gave every split a fixed run of
+# chunks_per_split KV chunks from the 131,072-token plan (47 splits x 44
+# chunks), so an 82k-token context was scanned by four of the 47 CTAs per
+# head tile: DenseMlaForwardKernel 0.44 -> 5.7 ms per decode step across the
+# 24 MLA layers, the whole 41 -> 46 ms/step long-context decode slowdown.
+# Every launched split now scans ceil(valid chunks / launched splits)
+# chunks; the merge kernel combines the same partials through the same
+# log-sum-exp merge (reference error unchanged; not bit-identical to the
+# served split order). Eager launches use min(num_splits, live chunks).
+# Files: overlays/dense-mla-balanced-splits-20260902/{_forward.py,b12x_mla.py}
+# (served-lineage branches agent/kimi-k3-dense-mla-balanced-splits-20260902
+# in ~/k3-longctx-b12x-mla-splits 00a14d3 and ~/k3-longctx-vllm-mla-splits
+# 2ca9d200e). They replace the k3-longctx-20260901 mounts of the same paths.
+services:
+  kimi-k3-production:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/dense-mla-balanced-splits-20260902/_forward.py:/opt/infernal-invocation/b12x/b12x/attention/dense_mla/_forward.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dense-mla-balanced-splits-20260902/b12x_mla.py:/opt/infernal-invocation/vllm/vllm/v1/attention/backends/mla/b12x_mla.py:ro
+    labels:
+      com.mydatacenter.dense-mla-balanced-splits: kimi-k3-dense-mla-balanced-splits-20260902

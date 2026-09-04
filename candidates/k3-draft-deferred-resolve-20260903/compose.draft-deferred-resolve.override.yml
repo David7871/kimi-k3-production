@@ -1,0 +1,23 @@
+# Deferred consumption of the remote DFlash draft reply (vLLM PR #604;
+# overlays/draft-deferred-resolve-20260903/). The target's rank 0 issues the
+# draft RPC on a reply thread and the model runner prepares the next step
+# while the round trip is in flight; the step's stream is parked with a host
+# function until the reply is staged, then the copies, the TP broadcast, the
+# draft sampling and the input-id combine run in stream order. The draft
+# tokens, cached draft logits and sample positions are the ones the
+# synchronous path produces. VLLM_K3_DRAFT_DEFERRED_RESOLVE=0 restores the
+# synchronous path on the same files.
+# Files replace the ubatch-prefill model_runner.py and the draft-topk
+# remote_speculator.py mounts and add async_utils.py (the output copy waits
+# for a draft copy recorded by the next step).
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DRAFT_DEFERRED_RESOLVE: "1"
+      VLLM_K3_DRAFT_TIMING_LOG_INTERVAL: "500"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/draft-deferred-resolve-20260903/model_runner.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/model_runner.py:ro
+      - /home/g0san/kimi-k3-production/overlays/draft-deferred-resolve-20260903/remote_speculator.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/spec_decode/dspark/remote_speculator.py:ro
+      - /home/g0san/kimi-k3-production/overlays/draft-deferred-resolve-20260903/async_utils.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/async_utils.py:ro
+    labels:
+      com.mydatacenter.draft-deferred-resolve: kimi-k3-draft-deferred-resolve-20260903

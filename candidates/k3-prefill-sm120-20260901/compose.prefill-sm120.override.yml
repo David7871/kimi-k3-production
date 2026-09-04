@@ -1,0 +1,18 @@
+services:
+  kimi-k3-production:
+    image: kimi-k3-production-issue75-dspark:k3-prefill-sm120-fa4-20260901-r3
+    environment:
+      # This is an internal attention tile only. Scheduler admission,
+      # preemption, KDA snapshots, LMCache commits, and recompute stay at 1536.
+      VLLM_MLA_INTERNAL_CONTEXT_WORKSPACE_SIZE: "24576"
+      # Override global FA2 only inside Kimi's dense MLA prefill backend.
+      VLLM_MLA_SM120_FA4_PREFILL: "1"
+    volumes:
+      - /home/g0san/k3-prefill-sm120.1FZqyb/vllm/vllm/envs.py:/opt/infernal-invocation/vllm/vllm/envs.py:ro
+      - /home/g0san/k3-prefill-sm120.1FZqyb/vllm/vllm/models/kimi_k3/nvidia/mla.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/mla.py:ro
+    labels:
+      com.mydatacenter.vllm-prefill-sm120: 8a89a1d2d
+      com.mydatacenter.prefill-scheduler-cadence: "1536"
+      com.mydatacenter.prefill-internal-context-tile: "24576"
+      com.mydatacenter.prefill-attention: sm120-fa4-kimi192x128-lse
+      com.mydatacenter.prefill-projection: retained-shared-workspace

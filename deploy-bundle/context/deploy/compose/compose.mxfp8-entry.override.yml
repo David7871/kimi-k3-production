@@ -1,0 +1,13 @@
+services:
+  kimi-k3-production:
+    environment:
+      # Keep decode on W4A16. Only materialized W4A8 prefill rows use the
+      # token-major MXFP8 handoff; M=9..896 stays on the BF16 fallback plan.
+      VLLM_KQUANT_QSRT_W4A8_PREQUANTIZED_INPUT: "1"
+    volumes:
+      - ${DEPLOY_ROOT:-/opt/kimi-k3-deploy}/overlays/w4a8-mxfp8-entry/kquant_hybrid.py:/opt/infernal-invocation/vllm/vllm/model_executor/layers/quantization/kquant_hybrid.py:ro
+      - ${DEPLOY_ROOT:-/opt/kimi-k3-deploy}/overlays/w4a8-mxfp8-entry/b12x_fused_moe_impl.py:/opt/infernal-invocation/b12x/b12x/moe/fused_moe/_impl.py:ro
+      - ${DEPLOY_ROOT:-/opt/kimi-k3-deploy}/overlays/w4a8-mxfp8-entry/b12x_dynamic.py:/opt/infernal-invocation/b12x/b12x/moe/_shared/kernels/dynamic.py:ro
+      - ${DEPLOY_ROOT:-/opt/kimi-k3-deploy}/overlays/w4a8-mxfp8-entry/b12x_silu.py:/opt/infernal-invocation/b12x/b12x/moe/_shared/kernels/silu.py:ro
+      - ${DEPLOY_ROOT:-/opt/kimi-k3-deploy}/overlays/w4a8-mxfp8-entry/b12x_situ.py:/opt/infernal-invocation/b12x/b12x/moe/_shared/kernels/situ.py:ro
+      - ${DEPLOY_ROOT:-/opt/kimi-k3-deploy}/overlays/w4a8-mxfp8-entry/b12x_relu2.py:/opt/infernal-invocation/b12x/b12x/moe/_shared/kernels/relu2.py:ro

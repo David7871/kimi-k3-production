@@ -1,0 +1,20 @@
+# Lossless bf16 PCIe two-shot all-reduce for the 112 KB < bytes <= 768 KB
+# window (b12x #290 runtime + the Kimi-K3 wrapper routing of branch
+# agent/kimi-k3-pcie-twoshot-20260903, vLLM #580's design). At TP8 with the
+# K=3 draft every decode all-reduce is 57 KB per request, so from
+# concurrency 2 the PyNCCL ring served all 283 all-reduces of a step.
+# The two-shot reduces each shard in FP32 in a fixed rank order and rounds
+# once (the bf16 ring rounds per hop). VLLM_PCIE_TWOSHOT_ROW_ELEMS=896
+# (7168 / 8) keeps every K3 token count eligible.
+# VLLM_PCIE_TWOSHOT_ALLREDUCE_MAX_SIZE=0 disables the route.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_PCIE_TWOSHOT_ALLREDUCE_MAX_SIZE: 768KB
+      VLLM_PCIE_TWOSHOT_ROW_ELEMS: "896"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/pcie-twoshot-20260903/custom_all_reduce.py:/opt/infernal-invocation/vllm/vllm/distributed/device_communicators/custom_all_reduce.py:ro
+      - /home/g0san/kimi-k3-production/overlays/pcie-twoshot-20260903/pcie_twoshot_bf16.py:/opt/infernal-invocation/b12x/b12x/comm/pcie/pcie_twoshot_bf16.py:ro
+      - /home/g0san/kimi-k3-production/overlays/pcie-twoshot-20260903/_twoshot_bf16_cute.py:/opt/infernal-invocation/b12x/b12x/comm/pcie/_twoshot_bf16_cute.py:ro
+    labels:
+      com.mydatacenter.pcie-twoshot: kimi-k3-pcie-twoshot-20260903

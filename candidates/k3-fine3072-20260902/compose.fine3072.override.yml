@@ -1,0 +1,76 @@
+# 3,072-token chunked prefill (mamba block, LMCache chunk and hit alignment,
+# scheduler budget, MLA/MoE workspaces all on the 3,072 grid).
+#
+# Per-chunk fixed costs (scheduler step, draft ingest hand-off, LMCache
+# store issue) amortize over twice the tokens, the W4A16 prefill plan can use
+# the 48-row route block at ~55 routed rows per expert, and each LMCache
+# chunk object (KDA state dominated, ~1 GB) now covers 3,072 tokens, so the
+# 80 GiB L1 holds ~480k tokens instead of ~240k. The prefix-restore
+# granularity coarsens to 3,072 tokens.
+#
+# The chunk size is part of the LMCache key geometry, so this profile uses a
+# new L1 pool name and a new L2 directory: every cached session prefix
+# starts cold. Switching back to the 1,536 profile (drop this override)
+# restores the old L2 directory; the old L1 pool is released when the new
+# name is created.
+#
+# Draft side: the standalone DFlash draft ingests target chunks, so its
+# --max-num-batched-tokens follows the chunk size.
+services:
+  kimi-k3-production:
+    environment:
+      MAMBA_BLOCK_SIZE: "3072"
+      PREFIX_MATCH_UNIT: "3072"
+      LMCACHE_CHUNK_SIZE: "3072"
+      LMCACHE_EXTERNAL_HIT_ALIGN: "3072"
+      MAX_NUM_BATCHED_TOKENS: "3072"
+      MAX_NUM_SCHEDULED_TOKENS: "3072"
+      VLLM_MLA_CHUNKED_PREFILL_WORKSPACE_SIZE: "3072"
+      B12X_MOE_WORKSPACE_TOKEN_LIMIT: "3072"
+      LMCACHE_SHM_NAME: kimik3_mythos5_text_dflash3_w32768_mamba3072_chunk3072_l1_80g_kv2176m_v1
+      # /mnt/lmcache-l2 had 568 GiB free on 2026-09-02 next to the preserved
+      # 1,536-chunk namespaces; the new namespace is capped accordingly. Raise
+      # it after retiring an old namespace directory.
+      LMCACHE_L2_GB: "400"
+    volumes:
+      - /mnt/lmcache-l2/kimik3/l2-mythos5-text-prob-dflash-w32768-mamba3072-chunk3072-kv2176m-v1:/lmcache/l2:rw
+    labels:
+      com.mydatacenter.chunk-profile: kimi-k3-fine3072-20260902
+  kimi-k3-draft:
+    command:
+      - "--draft-model"
+      - "/draft-model"
+      - "--target-weights"
+      - "/target-weights"
+      - "--target-config"
+      - "/opt/k3-dspark-3090/target-config"
+      - "--method"
+      - "dflash"
+      - "--device"
+      - "0"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8091"
+      - "--num-speculative-tokens"
+      - "3"
+      - "--max-model-len"
+      - "1048576"
+      - "--max-num-batched-tokens"
+      - "3072"
+      - "--max-num-seqs"
+      - "4"
+      - "--max-retained-requests"
+      - "8"
+      - "--draft-kv-cache-gib"
+      - "8.0"
+      - "--draft-kv-window"
+      - "32768"
+      - "--enable-cuda-graph"
+      - "--cuda-graph-warmups"
+      - "2"
+      - "--proposal-address"
+      - "tcp://127.0.0.1:8092"
+      - "--draft-quantization"
+      - "fp8_per_channel"
+      - "--draft-fp8-head"

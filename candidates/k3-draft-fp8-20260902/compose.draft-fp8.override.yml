@@ -1,0 +1,61 @@
+# fp8 DFlash draft: per-channel fp8 linear layers + rowwise-fp8 LM head.
+#
+# The BF16 six-layer DFlash draft (4.9 GB incl. the 2.35 GB shared lm_head)
+# is weight-bandwidth bound on GPU 0: the target's per-proposal timing shows
+# server_gpu_query ~5.5 ms + server_gpu_context ~1.4 ms of a ~7.3 ms round
+# trip. Online per-channel fp8 (vLLM shorthand fp8_per_channel: one scale per
+# output channel, dynamic per-token activation scales, torch._scaled_mm) and
+# the rowwise-fp8 lm_head copy halve the bytes read per proposal.
+#
+# Draft-time only: the target's verification pass never sees these weights,
+# so accepted outputs keep the target distribution (rejection sampling is
+# exact for any proposal distribution); only the acceptance length can move.
+# overlays/draft-fp8-20260902/ carries the standalone CLI flags
+# (--draft-quantization, --draft-fp8-head), the DFlash fp8 head
+# (maybe_init_fp8_draft_head / compute_logits), the load hook, and the
+# dequantized fused context-KV buffer. Rollback: drop this override.
+services:
+  kimi-k3-draft:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/draft-fp8-20260902/k3_dspark_standalone.py:/opt/k3-dspark-3090/source/vllm/entrypoints/k3_dspark_standalone.py:ro
+      - /home/g0san/kimi-k3-production/overlays/draft-fp8-20260902/qwen3_dflash.py:/opt/k3-dspark-3090/source/vllm/model_executor/models/qwen3_dflash.py:ro
+      - /home/g0san/kimi-k3-production/overlays/draft-fp8-20260902/utils.py:/opt/k3-dspark-3090/source/vllm/v1/worker/gpu/spec_decode/dflash/utils.py:ro
+    command:
+      - "--draft-model"
+      - "/draft-model"
+      - "--target-weights"
+      - "/target-weights"
+      - "--target-config"
+      - "/opt/k3-dspark-3090/target-config"
+      - "--method"
+      - "dflash"
+      - "--device"
+      - "0"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8091"
+      - "--num-speculative-tokens"
+      - "3"
+      - "--max-model-len"
+      - "1048576"
+      - "--max-num-batched-tokens"
+      - "1536"
+      - "--max-num-seqs"
+      - "4"
+      - "--max-retained-requests"
+      - "8"
+      - "--draft-kv-cache-gib"
+      - "8.0"
+      - "--draft-kv-window"
+      - "32768"
+      - "--enable-cuda-graph"
+      - "--cuda-graph-warmups"
+      - "2"
+      - "--proposal-address"
+      - "tcp://127.0.0.1:8092"
+      - "--draft-quantization"
+      - "fp8_per_channel"
+      - "--draft-fp8-head"
+    labels:
+      com.mydatacenter.draft-fp8: kimi-k3-dflash-fp8-per-channel-20260902

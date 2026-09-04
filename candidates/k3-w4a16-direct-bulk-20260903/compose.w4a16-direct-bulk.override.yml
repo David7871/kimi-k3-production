@@ -1,0 +1,9 @@
+# Bit-identical W4A16 direct-table staging optimization (b12x PR #300).
+# This later mount replaces the direct-table kernel mounted by
+# candidates/k3-w4a16-direct-t12-20260902 while retaining all its behavior.
+services:
+  kimi-k3-production:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/w4a16-direct-bulk-20260903/kernel.py:/opt/infernal-invocation/b12x/b12x/moe/_shared/kernels/w4a16/kernel.py:ro
+    labels:
+      com.mydatacenter.w4a16-direct-bulk: kimi-k3-w4a16-direct-bulk-20260903

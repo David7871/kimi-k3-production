@@ -1,0 +1,28 @@
+# W4A16 decode MoE kernel: direct SQG-XOR-Cheb-T12 rate table in shared memory.
+#
+# overlays/w4a16-direct-t12-20260902/{kernel.py,intrinsics.py,mixed_trellis.py}
+# (b12x, served files; PR branch agent/kimi-k3-w4a16-direct-t12-table-20260902-pr on origin/master, served-lineage branch ...-20260902-served)
+# let the fused W4A16 trellis kernel decode each 2-bit weight with one
+# shared-memory byte load from a 64 KiB precomposed table instead of the
+# twelve-instruction rank bijection plus the 4 KiB modal table. Output is
+# bit-identical; the decode MoE kernel is instruction-bound at one CTA per
+# SM, so the batch-8 decode kernel drops from 145 to 99 us on production
+# layer weights (GPU 0, layers 1/50/92). The table only fits next to the
+# 2-bit pipeline (100,480 of 101,376 B); other rates keep the modal table
+# and log a warning once. Mixed-rate kernels always keep the modal table.
+#
+# B12X_SQG_XOR_CHEB_T12_DIRECT_SMEM=1 turns the staging on (cache-keyed).
+# kernel.py stays writable: bin/patch-w4a16-splitk-decode-only.py and
+# bin/patch-w4a16-block48-regs.py rewrite it in place at boot (idempotent;
+# the overlay already carries both edits).
+# Rollback: drop this override (the modal table path is untouched).
+services:
+  kimi-k3-production:
+    environment:
+      B12X_SQG_XOR_CHEB_T12_DIRECT_SMEM: "1"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/w4a16-direct-t12-20260902/kernel.py:/opt/infernal-invocation/b12x/b12x/moe/_shared/kernels/w4a16/kernel.py
+      - /home/g0san/kimi-k3-production/overlays/w4a16-direct-t12-20260902/intrinsics.py:/opt/infernal-invocation/b12x/b12x/_lib/intrinsics.py:ro
+      - /home/g0san/kimi-k3-production/overlays/w4a16-direct-t12-20260902/mixed_trellis.py:/opt/infernal-invocation/b12x/b12x/moe/_shared/kernels/w4a16/mixed_trellis.py:ro
+    labels:
+      com.mydatacenter.w4a16-direct-t12: kimi-k3-w4a16-direct-t12-20260902

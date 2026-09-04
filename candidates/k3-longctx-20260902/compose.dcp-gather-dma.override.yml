@@ -1,0 +1,29 @@
+# Copy-engine DCP context-KV publisher for the pipelined chunked-context
+# loop, on top of compose.dcp-gather-pipeline.override.yml and
+# compose.dcp-gather-blockcap.override.yml. The rotated push kernel moves
+# the window with SM stores over PCIe, and those stores occupy the SMs'
+# memory pipelines for the PCIe-bound 2.3-2.6 ms of every window: the
+# attention, kv_b_proj and concat kernels that the pipeline overlaps ran
+# 1.1-1.5x slower even at the 16-block cap (measured 2026-09-02). The
+# copy-engine publisher moves each request's rows with cudaMemcpyAsync to
+# every peer's slot (plane-separated staging, one linear copy per plane and
+# destination) and only launches two single-block kernels for the epoch
+# signal and the wait, so the SMs stay free for the compute stream. Same
+# symmetric buffers, epoch and signal protocol; planes byte-identical.
+# Files: overlays/dcp-gather-pipeline-20260902/{mla.dma.py,dcp_utils.dma.py,
+# envs.dma.py,_C_k3ext.dma.abi3.so} (branch
+# agent/kimi-k3-dcp-gather-pipeline-20260902-pr working tree; the extension
+# adds _C_k3ext::direct_dcp_kv_gather_dma next to the rotated kernel and
+# the launch bound). VLLM_K3_DCP_GATHER_DMA=0 falls back to the kernel
+# publisher on the same files.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DCP_GATHER_DMA: "1"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/_C_k3ext.dma.abi3.so:/opt/k3ext/_C_k3ext.abi3.so:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/dcp_utils.dma.py:/opt/infernal-invocation/vllm/vllm/v1/attention/ops/dcp_utils.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/envs.dma.py:/opt/infernal-invocation/vllm/vllm/envs.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/mla.dma.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/mla.py:ro
+    labels:
+      com.mydatacenter.dcp-gather-dma: kimi-k3-dcp-gather-dma-20260902

@@ -1,0 +1,447 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import torch
+
+from vllm.model_executor.models.interfaces import supports_eagle3
+from vllm.models.kimi_k3.nvidia import model as kimi_model
+from vllm.models.kimi_k3.nvidia.model import (
+    KimiDecoderLayer,
+    KimiK3ForConditionalGeneration,
+    KimiLinearModel,
+)
+
+
+def _make_kimi_linear_model() -> KimiLinearModel:
+    model = object.__new__(KimiLinearModel)
+    torch.nn.Module.__init__(model)
+    model.register_buffer("_attn_res_workspace", None, persistent=False)
+    object.__setattr__(model, "aux_hidden_state_layers", (2,))
+    object.__setattr__(model, "use_sequence_parallel", False)
+    object.__setattr__(model, "reuse_attn_res_output", True)
+    object.__setattr__(model, "use_attn_res", False)
+    return model
+
+
+def test_kimi_k3_advertises_eagle3_support():
+    assert supports_eagle3(KimiK3ForConditionalGeneration)
+
+
+def test_kimi_k3_uses_shared_eagle3_layer_configuration():
+    target = object.__new__(KimiK3ForConditionalGeneration)
+    torch.nn.Module.__init__(target)
+    model = _make_kimi_linear_model()
+    object.__setattr__(model, "layers", [None] * 93)
+    language_model = SimpleNamespace(
+        embed_input_ids=lambda _: None,
+        model=model,
+    )
+    object.__setattr__(target, "language_model", language_model)
+    object.__setattr__(target, "_language_model_names", ["language_model"])
+
+    target.set_aux_hidden_state_layers((2, 46, 90))
+
+    assert model.aux_hidden_state_layers == (2, 46, 90)
+    assert target.get_eagle3_default_aux_hidden_state_layers() == (
+        2,
+        46,
+        90,
+    )
+
+
+def test_kimi_linear_forward_extracts_standard_aux_hidden_states(monkeypatch):
+    model = _make_kimi_linear_model()
+    initial_hidden_states = torch.tensor([[1.0, 2.0]])
+    layer_hidden_states = torch.tensor([[3.0, 4.0]])
+    layer_residual = torch.tensor([[5.0, 6.0]])
+
+    object.__setattr__(model, "start_layer", 0)
+    object.__setattr__(model, "end_layer", 1)
+    object.__setattr__(
+        model,
+        "layers",
+        [Mock(return_value=(layer_hidden_states, None, layer_residual))],
+    )
+    object.__setattr__(model, "aux_hidden_state_layers", (0, 1))
+    object.__setattr__(model, "use_attn_res", False)
+    monkeypatch.setattr(
+        kimi_model,
+        "get_pp_group",
+        lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
+    )
+
+    output, aux_hidden_states = model.forward(
+        input_ids=None,
+        positions=torch.tensor([0]),
+        intermediate_tensors=None,
+        inputs_embeds=initial_hidden_states,
+    )
+
+    expected_layer_output = layer_hidden_states + layer_residual
+    torch.testing.assert_close(output, expected_layer_output)
+    torch.testing.assert_close(aux_hidden_states[0], initial_hidden_states)
+    torch.testing.assert_close(aux_hidden_states[1], expected_layer_output)
+
+
+def test_kimi_linear_forward_extracts_attn_res_aux_hidden_states(monkeypatch):
+    model = _make_kimi_linear_model()
+    initial_hidden_states = torch.tensor([[1.0, 2.0]])
+    layer_hidden_states = torch.tensor([[3.0, 4.0]])
+    prefix_sum = torch.tensor([[5.0, 6.0]])
+    block_residual = torch.tensor([[[7.0, 8.0]]])
+    final_hidden_states = torch.tensor([[9.0, 10.0]])
+
+    object.__setattr__(model, "start_layer", 0)
+    object.__setattr__(model, "end_layer", 1)
+    object.__setattr__(
+        model,
+        "layers",
+        [Mock(return_value=(layer_hidden_states, prefix_sum, block_residual))],
+    )
+    object.__setattr__(model, "aux_hidden_state_layers", (0, 1))
+    object.__setattr__(model, "use_attn_res", True)
+    object.__setattr__(model, "num_attn_res_blocks", 1)
+    object.__setattr__(
+        model,
+        "output_attn_res_norm",
+        SimpleNamespace(weight=torch.ones(2), variance_epsilon=1e-5),
+    )
+    object.__setattr__(
+        model,
+        "output_attn_res_proj",
+        SimpleNamespace(weight=torch.ones(1, 2)),
+    )
+    monkeypatch.setattr(
+        kimi_model,
+        "get_pp_group",
+        lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
+    )
+    final_attn_res = Mock(return_value=final_hidden_states)
+    monkeypatch.setattr(kimi_model, "attn_res", final_attn_res)
+
+    output, aux_hidden_states = model.forward(
+        input_ids=None,
+        positions=torch.tensor([0]),
+        intermediate_tensors=None,
+        inputs_embeds=initial_hidden_states,
+    )
+
+    torch.testing.assert_close(output, final_hidden_states)
+    torch.testing.assert_close(aux_hidden_states[0], initial_hidden_states)
+    torch.testing.assert_close(aux_hidden_states[1], prefix_sum + layer_hidden_states)
+    assert final_attn_res.call_args.args[2] is block_residual
+
+
+def test_kimi_linear_forward_streams_auxiliary_states(monkeypatch):
+    model = _make_kimi_linear_model()
+    initial_hidden_states = torch.tensor([[1.0, 2.0]])
+    layer_hidden_states = torch.tensor([[3.0, 4.0]])
+    layer_residual = torch.tensor([[5.0, 6.0]])
+    projected = torch.tensor([[11.0, 12.0]])
+
+    class Projector:
+        def __init__(self):
+            self.calls = []
+            self.started_with = None
+
+        def can_stream_auxiliary_states(self, layer_ids, hidden_states):
+            return layer_ids == (0, 1) and hidden_states is initial_hidden_states
+
+        def begin_auxiliary_stream(self, hidden_states):
+            self.started_with = hidden_states
+
+        def accumulate_auxiliary_state(self, primary, residual):
+            self.calls.append((primary, residual))
+
+        def finish_auxiliary_stream(self):
+            return projected
+
+    projector = Projector()
+    model.set_aux_hidden_state_projector(projector)
+    object.__setattr__(model, "start_layer", 0)
+    object.__setattr__(model, "end_layer", 1)
+    object.__setattr__(
+        model,
+        "layers",
+        [Mock(return_value=(layer_hidden_states, None, layer_residual))],
+    )
+    object.__setattr__(model, "aux_hidden_state_layers", (0, 1))
+    object.__setattr__(model, "use_attn_res", False)
+    monkeypatch.setattr(
+        kimi_model,
+        "get_pp_group",
+        lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
+    )
+
+    output, aux_hidden_states = model.forward(
+        input_ids=None,
+        positions=torch.tensor([0]),
+        intermediate_tensors=None,
+        inputs_embeds=initial_hidden_states,
+    )
+
+    torch.testing.assert_close(output, layer_hidden_states + layer_residual)
+    assert projector.started_with is initial_hidden_states
+    assert projector.calls == [
+        (initial_hidden_states, None),
+        (layer_hidden_states, layer_residual),
+    ]
+    assert len(aux_hidden_states) == 1
+    assert aux_hidden_states[0] is projected
+
+
+def test_attn_res_stream_capture_receives_layer_outputs_in_order(monkeypatch):
+    """Verify the positional contract between ``forward`` and the capture tap."""
+    model = _make_kimi_linear_model()
+    initial_hidden_states = torch.tensor([[1.0, 2.0]])
+    layer_hidden_states = torch.tensor([[3.0, 4.0]])
+    prefix_sum = torch.tensor([[5.0, 6.0]])
+    block_residual = torch.tensor([[[7.0, 8.0]]])
+    captured = torch.tensor([[11.0, 12.0]])
+
+    object.__setattr__(model, "start_layer", 0)
+    object.__setattr__(model, "end_layer", 1)
+    object.__setattr__(
+        model,
+        "layers",
+        [Mock(return_value=(layer_hidden_states, prefix_sum, block_residual))],
+    )
+    object.__setattr__(model, "aux_hidden_state_layers", (1,))
+    object.__setattr__(model, "use_attn_res", True)
+    object.__setattr__(model, "num_attn_res_blocks", 1)
+    object.__setattr__(
+        model,
+        "output_attn_res_norm",
+        SimpleNamespace(weight=torch.ones(2), variance_epsilon=1e-5),
+    )
+    object.__setattr__(
+        model,
+        "output_attn_res_proj",
+        SimpleNamespace(weight=torch.ones(1, 2)),
+    )
+    monkeypatch.setattr(
+        kimi_model,
+        "get_pp_group",
+        lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
+    )
+    monkeypatch.setattr(kimi_model, "attn_res", Mock(return_value=torch.zeros(1, 2)))
+    monkeypatch.setenv("VLLM_KIMI_K3_AUX_ATTN_RES_STREAM", "1")
+
+    capture = Mock(return_value=captured)
+    monkeypatch.setattr(KimiLinearModel, "_capture_aux_hidden_stream", capture)
+
+    _, aux_hidden_states = model.forward(
+        input_ids=None,
+        positions=torch.tensor([0]),
+        intermediate_tensors=None,
+        inputs_embeds=initial_hidden_states,
+    )
+
+    layer_idx, got_prefix, got_pending, got_residual = capture.call_args.args
+    assert layer_idx == 0
+    assert got_prefix is prefix_sum
+    assert got_pending is layer_hidden_states
+    assert got_residual is block_residual
+    torch.testing.assert_close(aux_hidden_states[0], captured)
+
+
+def test_kimi_attn_res_workspace_is_reused_and_sliced():
+    model = _make_kimi_linear_model()
+    object.__setattr__(model, "num_attn_res_blocks", 3)
+
+    largest = model._get_attn_res_workspace(torch.empty(8, 4))
+    smaller = model._get_attn_res_workspace(torch.empty(2, 4))
+
+    assert largest.shape == (8, 3, 4)
+    assert smaller.shape == (2, 3, 4)
+    assert smaller.untyped_storage().data_ptr() == largest.untyped_storage().data_ptr()
+
+    grown = model._get_attn_res_workspace(torch.empty(16, 4))
+    assert grown.shape == (16, 3, 4)
+    assert grown.untyped_storage().data_ptr() != largest.untyped_storage().data_ptr()
+
+
+def test_kimi_retained_workspace_releases_cuda_cache(monkeypatch):
+    events = []
+    device = torch.device("cuda", 3)
+    monkeypatch.setattr(
+        torch.accelerator,
+        "synchronize",
+        lambda actual_device: events.append(("synchronize", actual_device)),
+    )
+    monkeypatch.setattr(
+        torch.accelerator,
+        "empty_cache",
+        lambda: events.append(("empty_cache", None)),
+    )
+
+    kimi_model._release_cuda_cache_before_retained_allocation(device)
+
+    assert events == [("synchronize", device), ("empty_cache", None)]
+
+
+def test_kimi_attn_res_workspace_can_be_reserved_before_prefill(monkeypatch):
+    model = _make_kimi_linear_model()
+    object.__setattr__(model, "use_attn_res", True)
+    object.__setattr__(model, "num_attn_res_blocks", 3)
+    object.__setattr__(model, "_max_num_batched_tokens", 16)
+    object.__setattr__(model, "_model_dtype", torch.bfloat16)
+    object.__setattr__(model, "config", SimpleNamespace(hidden_size=4))
+    model.register_parameter(
+        "reference_weight",
+        torch.nn.Parameter(torch.empty(1, dtype=torch.bfloat16)),
+    )
+
+    events = []
+    original_empty = torch.empty
+
+    def record_allocator_release(device):
+        events.append(("release", device.type))
+
+    def record_workspace_allocation(*args, **kwargs):
+        device = kwargs.get("device")
+        if device is not None:
+            events.append(("allocate", device.type))
+        return original_empty(*args, **kwargs)
+
+    monkeypatch.setattr(
+        kimi_model,
+        "_release_cuda_cache_before_retained_allocation",
+        record_allocator_release,
+    )
+    monkeypatch.setattr(torch, "empty", record_workspace_allocation)
+    model.reserve_attn_res_workspace()
+
+    assert events == [("release", "cpu"), ("allocate", "cpu")]
+    workspace = model._attn_res_workspace
+    assert workspace is not None
+    assert workspace.shape == (16, 3, 4)
+    assert workspace.dtype == torch.bfloat16
+    pointer = workspace.untyped_storage().data_ptr()
+    sliced = model._get_attn_res_workspace(torch.empty(8, 4, dtype=torch.bfloat16))
+    assert sliced.untyped_storage().data_ptr() == pointer
+
+
+def _make_attn_res_decoder_layer(*, block_write: bool):
+    layer = object.__new__(KimiDecoderLayer)
+    torch.nn.Module.__init__(layer)
+    object.__setattr__(layer, "use_attn_res", True)
+    object.__setattr__(layer, "reuse_attn_res_output", True)
+    object.__setattr__(layer, "is_block_write_layer", block_write)
+    object.__setattr__(layer, "is_final_block_write_layer", False)
+    object.__setattr__(layer, "block_write_idx", 0)
+    object.__setattr__(layer, "prev_valid_blocks", 0)
+    object.__setattr__(
+        layer,
+        "self_attention_res_norm",
+        SimpleNamespace(weight=torch.ones(4), variance_epsilon=1e-5),
+    )
+    object.__setattr__(
+        layer,
+        "self_attention_res_proj",
+        SimpleNamespace(weight=torch.ones(1, 4)),
+    )
+    object.__setattr__(
+        layer,
+        "input_layernorm",
+        SimpleNamespace(weight=torch.ones(4), variance_epsilon=1e-5),
+    )
+    object.__setattr__(
+        layer,
+        "mlp_res_norm",
+        SimpleNamespace(weight=torch.ones(4), variance_epsilon=1e-5),
+    )
+    object.__setattr__(
+        layer,
+        "mlp_res_proj",
+        SimpleNamespace(weight=torch.ones(1, 4)),
+    )
+    object.__setattr__(
+        layer,
+        "post_attention_layernorm",
+        SimpleNamespace(weight=torch.ones(4), variance_epsilon=1e-5),
+    )
+    return layer
+
+
+def test_kimi_pre_attn_norm_uses_consumed_or_workspace_output(monkeypatch):
+    layer = _make_attn_res_decoder_layer(block_write=True)
+    prefix = torch.randn(2, 4)
+    delta = torch.randn(2, 4)
+    blocks = torch.randn(2, 3, 4)
+    scratch = blocks[:, -1]
+    calls = []
+
+    def record_attn_res(*args, **kwargs):
+        calls.append(kwargs["output"])
+        output = kwargs["output"]
+        return args[0].clone() if output is None else output
+
+    monkeypatch.setattr(kimi_model, "attn_res", record_attn_res)
+
+    first, _, _ = layer._pre_attn_norm(None, blocks, prefix, scratch)
+    later, _, _ = layer._pre_attn_norm(delta, blocks, prefix, scratch)
+
+    assert first is scratch
+    assert later is delta
+    assert calls == [scratch, delta]
+
+    object.__setattr__(layer, "reuse_attn_res_output", False)
+    layer._pre_attn_norm(delta, blocks, prefix, scratch)
+    assert calls[-1] is None
+
+
+def test_kimi_post_attn_norm_reuses_dead_input(monkeypatch):
+    prefix = torch.randn(2, 4)
+    attention_output = torch.randn(2, 4)
+    blocks = torch.randn(2, 3, 4)
+    outputs = []
+
+    def record_attn_res(*args, **kwargs):
+        outputs.append(kwargs["output"])
+        return kwargs["output"]
+
+    monkeypatch.setattr(kimi_model, "attn_res", record_attn_res)
+
+    block_layer = _make_attn_res_decoder_layer(block_write=True)
+    block_hidden, block_prefix, _ = block_layer._post_attn_norm(
+        attention_output, blocks, prefix
+    )
+    regular_layer = _make_attn_res_decoder_layer(block_write=False)
+    regular_hidden, regular_prefix, _ = regular_layer._post_attn_norm(
+        attention_output, blocks, prefix
+    )
+
+    assert block_hidden is prefix
+    assert block_prefix is attention_output
+    assert regular_hidden is attention_output
+    assert regular_prefix is prefix
+    assert outputs == [prefix, attention_output]
+
+
+def test_kimi_post_attn_norm_preserves_final_committed_block(monkeypatch):
+    prefix = torch.randn(2, 4)
+    attention_output = torch.randn(2, 4)
+    blocks = torch.randn(2, 3, 4)
+    allocated_output = torch.randn(2, 4)
+    outputs = []
+
+    def record_attn_res(*args, **kwargs):
+        outputs.append(kwargs["output"])
+        return allocated_output
+
+    monkeypatch.setattr(kimi_model, "attn_res", record_attn_res)
+    layer = _make_attn_res_decoder_layer(block_write=True)
+    object.__setattr__(layer, "is_final_block_write_layer", True)
+
+    hidden, next_prefix, next_blocks = layer._post_attn_norm(
+        attention_output, blocks, prefix
+    )
+
+    assert hidden is allocated_output
+    assert next_prefix is attention_output
+    assert next_blocks is blocks
+    assert outputs == [None]

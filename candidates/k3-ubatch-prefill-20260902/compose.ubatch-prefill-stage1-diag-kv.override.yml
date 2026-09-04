@@ -1,0 +1,10 @@
+# Diagnostic only: stage 1 (sequential halves, one thread, no ubatch
+# contexts) with the same KV headroom as the stage-2 diagnostics, to check
+# the split mechanics themselves on a cold prompt.
+services:
+  kimi-k3-production:
+    environment:
+      KV_CACHE_MEMORY_BYTES: "1717986918"
+      MAX_MODEL_LEN: "655360"
+      VLLM_K3_UBATCH_PREFILL: "1"
+      VLLM_K3_UBATCH_PREFILL_OVERLAP: "0"

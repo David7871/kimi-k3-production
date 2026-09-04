@@ -1,0 +1,13 @@
+# Deferred remote-draft context ingest for pure mid-prefill steps.
+# Replaces the vllm-live-base remote_speculator.py mount with the same file
+# plus the kimi-k3-draft-async-ingest patch (overlays/draft-async-ingest-20260901/).
+# Rollback: recreate kimi-k3-production without this override file, or set
+# VLLM_K3_DRAFT_ASYNC_PREFILL_INGEST=0 to keep the mount but disable deferral.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DRAFT_ASYNC_PREFILL_INGEST: "2"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/draft-async-ingest-20260901/remote_speculator.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/spec_decode/dspark/remote_speculator.py:ro
+    labels:
+      com.mydatacenter.draft-async-ingest: kimi-k3-draft-async-ingest-20260901

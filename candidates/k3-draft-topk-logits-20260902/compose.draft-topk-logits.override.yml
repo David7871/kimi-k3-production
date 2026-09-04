@@ -1,0 +1,28 @@
+# Target side of the top-k draft-distribution transport (vLLM PR #585).
+#
+# overlays/draft-topk-logits-20260902/remote_speculator.py (served remote
+# speculator + PR #585): with VLLM_K3_DRAFT_LOGITS_TOPK=k > 0 the target asks
+# the draft server for the k largest logits per proposed position instead
+# of the full 163,840-entry BF16 row (~1 MB per request at K=3), stages the
+# small frame through pinned memory, broadcasts it to the TP ranks and
+# scatters it over the fill logit -1e4 into the dense draft-logits buffer.
+# The draft token is sampled from, and verified against, that truncated
+# distribution, so the target's output distribution is unchanged (exact
+# speculative sampling); only the acceptance rate depends on the draft mass
+# outside the top-k.
+#
+# Choosing k: the draft candidate (candidates/k3-draft-ingest-graph-20260902)
+# logs "Draft logits mass outside top-k ..." for k = 256/1024/4096/16384 on
+# served traffic. Pick the smallest k whose mean mass is below ~1e-3 (that
+# bounds the acceptance loss per position) and set it below; the served
+# draft server must carry PR #585 (the draft candidate does).
+# Requires a target restart (env + mounted file). Rollback: drop this
+# override or set VLLM_K3_DRAFT_LOGITS_TOPK=0 (dense transport).
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DRAFT_LOGITS_TOPK: "${K3_DRAFT_LOGITS_TOPK:-0}"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/draft-topk-logits-20260902/remote_speculator.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/spec_decode/dspark/remote_speculator.py:ro
+    labels:
+      com.mydatacenter.draft-topk-logits: kimi-k3-draft-topk-logits-20260902

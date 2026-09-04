@@ -1,0 +1,104 @@
+services:
+  kimi-k3-production:
+    # Previously qualified issue-75 QSRT target; r36 is intentionally removed.
+    image: kimi-k3-production-issue75-dspark@sha256:f18184728c27959de26cf11952d7a8b96e57b513a6badf8bf3e09fd4cda16a76
+    container_name: kimi-k3-production
+    # Issue-75 DCP8 profile with colocated DSpark depth configured below.
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    security_opt:
+      - label=disable
+    ulimits:
+      memlock: -1
+      stack: 67108864
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      CUDA_DEVICE_ORDER: PCI_BUS_ID
+      # Natural PCI order is the validated TP8/DCP8 rank order.
+      CUDA_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7"
+      CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+      MODEL: /model
+      DRAFT_MODEL: /draft-model
+      PORT: "8090"
+      TP_SIZE: "8"
+      DCP_SIZE: "8"
+      SERVED_MODEL_NAME: Kimi-K3
+      MAX_MODEL_LEN: "372000"
+      # Colocated DSpark K3: 1536 target slots + 4 * 2 lookahead slots.
+      MAX_NUM_BATCHED_TOKENS: "1544"
+      MAX_NUM_SCHEDULED_TOKENS: "1536"
+      MAX_NUM_SEQS: "4"
+      # Use the previously qualified 2.1875 GiB/rank allocation so four short
+      # requests fit concurrently. The 372K admission limit still exceeds the
+      # boot-reported full-length concurrency and does not imply C4 at 372K.
+      KV_CACHE_MEMORY_BYTES: "2348810240"
+      GPU_MEMORY_UTILIZATION: "0.985"
+      MAMBA_BLOCK_SIZE: "1536"
+      PREFIX_MATCH_UNIT: "1536"
+      ENABLE_VISION: "0"
+      VLLM_DCP_SHARD_DRAFT: "0"
+      B12X_MOE_WORKSPACE_TOKEN_LIMIT: "4096"
+      B12X_W4A16_STABLE_ROUTE_PACK: "1"
+      B12X_W4A16_PREFILL_FUSED_SUM: "1"
+      VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE: "0"
+      # Count NaN logits per request so a long-context numerical failure is
+      # observable instead of looking like an ordinary long generation.
+      VLLM_COMPUTE_NANS_IN_LOGITS: "1"
+      KIMI_PCIE_ALLREDUCE_BACKEND: flashinfer-ipc
+      FLASHINFER_AUTOTUNE_DIR: /opt/pcie-pr-audit/autotune
+      # K3 C1/C2 verify four/eight rows through one-shot collectives; C3/C4
+      # use the normal larger-message fallback for row-12/16 payloads.
+      VLLM_PCIE_ONESHOT_ALLREDUCE_MAX_SIZE: "112KB"
+      VLLM_PCIE_ONESHOT_FUSED_ADD_RMS_NORM_MAX_SIZE: "112KB"
+      VLLM_SERVER_DEV_MODE: "1"
+      # Production-qualified DCP8 fine-object protocol: 1,536 global tokens
+      # per LMCache object, with 192 attention rows/rank and one complete
+      # recurrent state per object. The producer namespace includes the
+      # speculative depth because K7 and K3 produce incompatible cache state.
+      LMCACHE_MODE: disk
+      LMCACHE_TRANSFER_MODE: engine_driven
+      LMCACHE_EXPECTED_SOURCE_ROOT: /opt/infernal-invocation/lmcache
+      LMCACHE_SEPARATE_OBJECT_GROUPS: "1"
+      LMCACHE_SERVER_ENV: "CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY PYTHONPATH=/opt/infernal-invocation/b12x:/opt/infernal-invocation/vllm"
+      LMCACHE_SHM_NAME: kimik3_issue75_dcp8_k3_fine1536_mlaonly4219_l1_48g_v1
+      LMCACHE_CHUNK_SIZE: "1536"
+      LMCACHE_L1_INIT_GB: "48"
+      LMCACHE_L1_GB: "48"
+      LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT: "1"
+      LMCACHE_L2_PATH: /lmcache/l2
+      # Keep enough persistent history for long Hermes sessions while
+      # retaining roughly 140 GiB filesystem headroom at full cache growth.
+      LMCACHE_L2_GB: "512"
+      LMCACHE_L2_WORKERS: "4"
+      LMCACHE_MAX_GPU_WORKERS: "8"
+      LMCACHE_MAX_CPU_WORKERS: "4"
+      LMCACHE_PORT: "5555"
+      LMCACHE_HTTP_PORT: "8088"
+      LMCACHE_START_TIMEOUT: "120"
+      LMCACHE_LOG: /tmp/lmcache-mp-8090.log
+      LMCACHE_HEARTBEAT_INTERVAL: "5"
+      LMCACHE_WORKER_REAP_TIMEOUT: "120"
+      LMCACHE_WORKER_REGISTRATION_GRACE: "86400"
+      LMCACHE_KV_LOAD_FAILURE_POLICY: recompute
+    volumes:
+      - /mnt/models/Kimi-K3-QSRT-K2:/model:ro
+      - /mnt/models/Kimi-K3-DSpark-Inferact-BF16:/draft-model:ro
+      - /mnt/models/kimi-k3-production-cache:/cache:rw
+      - /home/g0san/kimi-k3-production/autotune/pcie_ipc_all_reduce_ws8.json:/opt/pcie-pr-audit/autotune/pcie_ipc_all_reduce_ws8.json:ro
+      - /mnt/lmcache-l2/kimik3/l2-issue75-dcp8-k3-fine1536-mlaonly4219-v1:/lmcache/l2:rw
+      - /home/g0san/kimi-k3-production/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh:/usr/local/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh:ro
+      - /home/g0san/kimi-k3-production/bin/serve-kimi-k3-issue75-dspark-k3-dcp8.sh:/usr/local/bin/serve-kimi-k3-issue75-dspark-k3-dcp8.sh:ro
+      - /home/g0san/kimi-k3-production/bin/entrypoint-issue75-colocated-dspark-k3-dcp8.sh:/usr/local/bin/entrypoint-issue75-colocated-dspark-k3-dcp8.sh:ro
+      - /home/g0san/kimi-k3-production/bin/patch-lmcache-mla-only.py:/usr/local/bin/patch-lmcache-mla-only.py:ro
+    entrypoint:
+      - /usr/local/bin/entrypoint-issue75-colocated-dspark-k3-dcp8.sh

@@ -1,0 +1,11 @@
+# FlashInfer's TP2/TP4/TP8 PCIe IPC workspace allocates one CUDA slab per rank
+# and opens every nonlocal rank's handle. The adapter advertises all-peer
+# auxiliary support only after one of those workspaces has been prepared. This
+# permits the large-message B12X DMA runtime to allocate across the same peer
+# set without weakening the consumer's fail-closed capability check.
+services:
+  kimi-k3-production:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/flashinfer-peer-capability-20260904/flashinfer_pcie_all_reduce.py:/opt/infernal-invocation/vllm/vllm/distributed/device_communicators/flashinfer_pcie_all_reduce.py:ro
+    labels:
+      com.mydatacenter.flashinfer-peer-capability: kimi-k3-flashinfer-peer-capability-20260904

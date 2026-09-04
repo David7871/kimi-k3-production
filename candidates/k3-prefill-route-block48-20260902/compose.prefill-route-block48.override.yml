@@ -1,0 +1,20 @@
+# 48-row route block for W4A16 trellis prefill launches.
+#
+# Extends candidates/k3-prefill-route-block32-20260902 (which must stay in the
+# merge): bin/patch-w4a16-block48-regs.py adds the (256, 3, 8, 8, False)
+# register-table entry the served b12x tree lacks (upstream b12x da8f2cb), and
+# VLLM_KQUANT_W4A16_PREFILL_BLOCK_M pins the prefill plan to 48 rows instead
+# of the 32 rows b12x's routed-size policy picks at 1,536 tokens. Real-layer
+# measurement on GPU 0 (research/prefill-w4a16-20260902/logs/harness-graph-b48v2.log):
+# 2.89 -> 2.67 ms per layer at 1,536 tokens (-7.6%), 2.20 -> 2.34 at 512,
+# outputs bitwise identical to the 32-row and 8-row plans. Chunks are 1,536
+# tokens except a prompt's tail, so the net effect is positive.
+# Rollback: drop this override (policy default 32) or set the env to 32.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_KQUANT_W4A16_PREFILL_BLOCK_M: "48"
+    volumes:
+      - /home/g0san/kimi-k3-production/bin/patch-w4a16-block48-regs.py:/usr/local/bin/patch-w4a16-block48-regs.py:ro
+    labels:
+      com.mydatacenter.prefill-route-block48: kimi-k3-w4a16-prefill-route-block48-20260902

@@ -1,0 +1,11 @@
+# causal_conv1d_update token-load hoist (port of vLLM #579; branch
+# agent/kimi-k3-conv1d-update-hoist-20260903): width-4 decode/spec updates
+# load every token row before the loop and use a 64-channel tile; bitwise
+# identical. Kimi-K3's 69 KDA layers call it on the speculative-decode
+# path. VLLM_CAUSAL_CONV1D_UPDATE_HOIST=0 restores the generic loop.
+services:
+  kimi-k3-production:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/conv1d-update-hoist-20260903/causal_conv1d.py:/opt/infernal-invocation/vllm/vllm/model_executor/layers/mamba/ops/causal_conv1d.py:ro
+    labels:
+      com.mydatacenter.conv1d-hoist: kimi-k3-conv1d-update-hoist-20260903

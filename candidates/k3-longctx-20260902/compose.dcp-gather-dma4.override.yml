@@ -1,0 +1,31 @@
+# Copy-engine DCP context-KV publisher with the two-switch relay schedule,
+# on top of compose.dcp-gather-pipeline.override.yml and
+# compose.dcp-gather-blockcap.override.yml. With the flat all-to-all
+# schedule (compose.dcp-gather-dma2.override.yml, 2026-09-02 15:34 UTC boot)
+# every row crosses the inter-switch link once per peer behind it: rank 0's
+# 3 MB copies ran at 27 GB/s to its switch mates and at 7-9 GB/s to the
+# ranks behind the uplink, 2.0 ms of copies per window, the same fabric
+# floor as the push kernel. VLLM_K3_DCP_GATHER_CLUSTERS names the two
+# switch groups in DCP ranks (target GPUs 1-4 and 5-8); each rank copies its
+# rows to its three mates and to its same-position partner across the
+# uplink, then forwards the partner's rows to the mates, so the uplink
+# carries each row once (4 x 3.5 MB per direction per window instead of
+# 16 x). Same buffers, epoch and signal protocol (two signal phases);
+# planes byte-identical. Empty VLLM_K3_DCP_GATHER_CLUSTERS = flat schedule.
+# Files: overlays/dcp-gather-pipeline-20260902/{mla.dma4.py,dcp_utils.dma3.py,
+# envs.dma4.py,_C_k3ext.dma3.abi3.so} (branch
+# agent/kimi-k3-dcp-gather-pipeline-20260902-pr working tree).
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DCP_GATHER_DMA: "1"
+      VLLM_K3_DCP_GATHER_CLUSTERS: "0,1,2,3;4,5,6,7"
+      VLLM_K3_DCP_GATHER_DMA_MIN_ROWS: "2048"
+      VLLM_K3_DCP_GATHER_DMA_MIN_ROWS_FILE: /opt/k3ext/tuning/dma_min_rows
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/_C_k3ext.dma3.abi3.so:/opt/k3ext/_C_k3ext.abi3.so:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/dcp_utils.dma3.py:/opt/infernal-invocation/vllm/vllm/v1/attention/ops/dcp_utils.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/envs.dma4.py:/opt/infernal-invocation/vllm/vllm/envs.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/mla.dma4.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/mla.py:ro
+    labels:
+      com.mydatacenter.dcp-gather-dma: kimi-k3-dcp-gather-dma4-20260902

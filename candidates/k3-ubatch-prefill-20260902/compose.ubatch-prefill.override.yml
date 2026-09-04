@@ -1,0 +1,15 @@
+# Stage 1 of the split-prefill / all-reduce overlap work: run each eligible
+# prefill chunk as two consecutive row halves (no overlap yet). Exact by
+# construction; used to validate the cross-half KV / recurrent-state
+# hand-off before the two-stream schedule is added. Enable with
+# VLLM_K3_UBATCH_PREFILL=1 (default off even when mounted).
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_UBATCH_PREFILL: "1"
+      VLLM_K3_UBATCH_PREFILL_MIN_TOKENS: "1024"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/ubatch-prefill-20260902/model_runner.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/model_runner.py:ro
+      - /home/g0san/kimi-k3-production/overlays/ubatch-prefill-20260902/k3_ubatch_prefill.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/k3_ubatch_prefill.py:ro
+    labels:
+      com.mydatacenter.ubatch-prefill: kimi-k3-split-prefill-stage1-20260902

@@ -1,0 +1,126 @@
+services:
+  kimi-k3-production:
+    image: kimi-k3-production-issue75-dspark:20260823-r1
+    container_name: kimi-k3-production
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    security_opt:
+      - label=disable
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      CUDA_VISIBLE_DEVICES: "1,2,3,4,5,6,7,8"
+      CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+      # Finalized FlashInfer PCIe IPC all-reduce handles the tuned 1-8 row
+      # decode shapes; larger collectives remain on the PyNCCL fallback.
+      KIMI_PCIE_ALLREDUCE_BACKEND: flashinfer-ipc
+      FLASHINFER_AUTOTUNE_DIR: /opt/pcie-pr-audit/autotune
+      # Depth-3 B2 verifies eight rows: 8 * 7,168 BF16 = 112 KiB.
+      VLLM_PCIE_ONESHOT_ALLREDUCE_MAX_SIZE: "112KB"
+      VLLM_PCIE_ONESHOT_FUSED_ADD_RMS_NORM_MAX_SIZE: "112KB"
+      MODEL: /model
+      DRAFT_MODEL: /draft-model
+      HOST: 127.0.0.1
+      PORT: "8090"
+      TP_SIZE: "8"
+      DCP_SIZE: "8"
+      SERVED_MODEL_NAME: Kimi-K3
+      MAX_MODEL_LEN: "512000"
+      # DSpark depth 3 reserves two extra slots per active request. With two
+      # sequences, 1,540 total slots preserve the validated 1,536-token target
+      # scheduler boundary.
+      MAX_NUM_BATCHED_TOKENS: "1540"
+      MAX_NUM_SCHEDULED_TOKENS: "1536"
+      MAX_NUM_SEQS: "2"
+      # r29 keeps vision weights resident. The former 2.1875 GiB reservation
+      # left only 100-270 MiB/rank and reproduced OOMs in the 106 MiB remote
+      # DSpark context concat and 20-23 MiB LMCache gather buffers. 1.5 GiB
+      # returns 704 MiB/rank while retaining about 1.31x capacity over a
+      # block-rounded 512K request.
+      KV_CACHE_MEMORY_BYTES: "1610612736"
+      GPU_MEMORY_UTILIZATION: "0.985"
+      # Fine-cache profile: recurrent checkpoints, APC hashes, and LMCache
+      # objects share a 1,536-token cadence. DCP8 full-attention manager blocks
+      # remain 12,288 global tokens and are projected to 192 rank-local rows.
+      MAMBA_BLOCK_SIZE: "1536"
+      PREFIX_MATCH_UNIT: "1536"
+      B12X_MOE_WORKSPACE_TOKEN_LIMIT: "4096"
+      # Issue #75 B12X PR #239: deterministic fixed-capacity route packing.
+      B12X_W4A16_STABLE_ROUTE_PACK: "1"
+      B12X_W4A16_PREFILL_FUSED_SUM: "1"
+      ENABLE_VISION: "1"
+      MAX_IMAGES_PER_PROMPT: "5"
+      VLLM_DCP_SHARD_DRAFT: "0"
+      VLLM_K3_DRAFT_REMOTE_ADDRESS: tcp://127.0.0.1:8092
+      VLLM_K3_DRAFT_REMOTE_TIMEOUT_MS: "30000"
+      VLLM_K3_DRAFT_TIMING_LOG_INTERVAL: "32"
+      # Loopback-only service; expose vLLM's cache reset endpoint for verified
+      # APC/L2 isolation probes and operational cache maintenance.
+      VLLM_SERVER_DEV_MODE: "1"
+      LMCACHE_MODE: disk
+      LMCACHE_TRANSFER_MODE: engine_driven
+      LMCACHE_EXPECTED_SOURCE_ROOT: /opt/infernal-invocation/lmcache
+      LMCACHE_SEPARATE_OBJECT_GROUPS: "1"
+      # The r29 source checkout contains the lightweight LMCache CLI, which
+      # lacks the full 0.5.2+glm52dcp.5 server options. Keep patched source on
+      # the model/worker PYTHONPATH, but let the standalone server import the
+      # full /opt/venv installation by omitting only the LMCache source root.
+      LMCACHE_SERVER_ENV: "CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY PYTHONPATH=/opt/infernal-invocation/b12x:/opt/infernal-invocation/vllm"
+      # Named direct SHM avoids whole-prefix pickle serialization copies. The
+      # fixed 16 GiB pool is shared by all workers instead of duplicated per
+      # long-prefix transfer.
+      LMCACHE_SHM_NAME: kimik3_fine1536_l1_16g_v1
+      # Recurrent checkpoints, APC hashes, and LMCache objects all advance at
+      # the same 1,536-token boundary.
+      LMCACHE_CHUNK_SIZE: "1536"
+      LMCACHE_L1_INIT_GB: "16"
+      # Previous fine1536 production qualification established 16 GiB as the
+      # no-OOM demand-backed L1 ceiling; keep that source-matched value.
+      LMCACHE_L1_GB: "16"
+      # Serialize large L2 restores so temporary transfer reservations cannot
+      # overlap and amplify host-memory pressure.
+      LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT: "1"
+      LMCACHE_L2_PATH: /lmcache/l2
+      LMCACHE_L2_GB: "512"
+      LMCACHE_L2_WORKERS: "4"
+      LMCACHE_MAX_GPU_WORKERS: "8"
+      LMCACHE_MAX_CPU_WORKERS: "4"
+      LMCACHE_PORT: "5555"
+      LMCACHE_HTTP_PORT: "8088"
+      LMCACHE_START_TIMEOUT: "120"
+      LMCACHE_LOG: /tmp/lmcache-mp-8090.log
+      LMCACHE_HEARTBEAT_INTERVAL: "5"
+      LMCACHE_WORKER_REAP_TIMEOUT: "120"
+      LMCACHE_WORKER_REGISTRATION_GRACE: "86400"
+    volumes:
+      - /mnt/models/Kimi-K3-QSRT-K2:/model:ro
+      # The QSRT-K2 archive stores BF16 vision/projector weights without MXFP8
+      # scales. Its original ignore list predates vision serving, so r29 gets a
+      # deployment-local config overlay; the checkpoint and rollback stay intact.
+      - /home/g0san/kimi-k3-production/overrides/r29-kimi-k3-qsrt-k2-config.json:/model/config.json:ro
+      - /mnt/models/Kimi-K3-DSpark-Inferact-BF16:/draft-model:ro
+      - /mnt/models/kimi-k3-production-cache:/cache:rw
+      # Exact-host TP8 tune cache for FlashInfer rows 1, 2, 4, and 8.
+      - /home/g0san/kimi-k3-production/autotune/pcie_ipc_all_reduce_ws8.json:/opt/pcie-pr-audit/autotune/pcie_ipc_all_reduce_ws8.json:ro
+      # Fresh namespace for issue #75 vLLM 7a2f932 (#468/#469/#471),
+      # B12X #239, DSpark target-APC, PMU 1,536, and LMCache e712fb39.
+      # The previous vLLM036b9ad namespace remains intact for rollback.
+      - /mnt/lmcache-l2/kimik3/l2-production-vllm7a2f932-dspark08354e67-pmu1536-b12xqsrt471889e-pr239-lmcachee712fb39-mamba1536-fine1536-v1:/lmcache/l2:rw
+      # LMCache operational patches (prefetch policy, L1 TTLs, heartbeat
+      # timeout decouple, heartbeat-at-registration) applied before the
+      # packaged launcher. Worker registration grace is env-configurable in
+      # this wrapper revision (LMCACHE_WORKER_REGISTRATION_GRACE above).
+      # Single-file bind mount pins the inode: edits on the host require a
+      # compose recreate to take effect, not a plain docker restart.
+      - /home/g0san/kimi-k3-production/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh:/usr/local/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh:ro
+    entrypoint:
+      - /usr/local/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh

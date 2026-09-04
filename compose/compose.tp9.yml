@@ -1,0 +1,129 @@
+services:
+  kimi-k3-production:
+    # TP9/DCP9 production on nine GPUs (8x Max-Q + 1x Workstation Edition on
+    # bus 09). Same qualified issue-75 image; B12X virtual-TP padding covers
+    # heads 96->99 (local 11; the b12x-mla head-tile-tail patch runs the
+    # gathered 99 as 104 kernel rows with a masked tail — the former 96->144
+    # over-padding is retired) and MoE intermediate 3072->3456. The odd-shard
+    # pure-K2 atom partition patch is applied by the TP9 entrypoint.
+    image: kimi-k3-production-issue75-dspark@sha256:f18184728c27959de26cf11952d7a8b96e57b513a6badf8bf3e09fd4cda16a76
+    container_name: kimi-k3-production
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    security_opt:
+      - label=disable
+    ulimits:
+      memlock: -1
+      stack: 67108864
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      CUDA_DEVICE_ORDER: PCI_BUS_ID
+      # Natural PCI order: 0=09(new, switch B), 1-4=0c,0d,10,11 (switch B),
+      # 5-8=19,1a,1d,1e (switch A). Single DCP group spans both switches as
+      # at DCP8.
+      CUDA_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7,8"
+      CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+      # LMCache pins KV by address, so expandable_segments is forced off by
+      # the wrapper; cap split size instead to bound fragmentation (a 450 MiB
+      # reserved-but-unallocated pool was observed before the 54 MiB DSpark
+      # concat OOM).
+      PYTORCH_CUDA_ALLOC_CONF: "max_split_size_mb:256"
+      MODEL: /model
+      DRAFT_MODEL: /draft-model
+      PORT: "8090"
+      TP_SIZE: "9"
+      DCP_SIZE: "9"
+      SERVED_MODEL_NAME: Kimi-K3
+      MAX_MODEL_LEN: "372000"
+      # Colocated DSpark K3: 1536 target slots + 4 * 2 lookahead slots. The
+      # physical attention block stays 1536; the LMCache/recurrent cadence is
+      # 4608 = 3 blocks = lcm(block, 9 ranks) -> 512 rank-local rows/chunk.
+      MAX_NUM_BATCHED_TOKENS: "1540"
+      MAX_NUM_SCHEDULED_TOKENS: "1536"
+      MAX_NUM_SEQS: "2"
+      # TP9 VRAM: QSRT local extent stays 384 channels so expert bytes/rank
+      # do not shrink; 2.19 GiB KV once left ~8 MiB free and NCCL a2a init
+      # OOMed under the old 144-head layout. 1.0 GiB = 389,347 tokens (1.05x
+      # of 372k). The heads99 layout frees q/o projection padding; raise KV
+      # only after measuring post-boot free VRAM.
+      KV_CACHE_MEMORY_BYTES: "1073741824"
+      GPU_MEMORY_UTILIZATION: "0.985"
+      MAMBA_BLOCK_SIZE: "4608"
+      PREFIX_MATCH_UNIT: "1536"
+      ENABLE_VISION: "0"
+      VLLM_DCP_SHARD_DRAFT: "0"
+      # TP9 VRAM reclaim: the scheduler caps chunks at 1540 tokens, so the
+      # 4096-token MLA prefill workspace is oversized; halving it frees
+      # hundreds of MiB per rank (local heads are 16 at TP9, 4/3 of TP8).
+      VLLM_MLA_CHUNKED_PREFILL_WORKSPACE_SIZE: "1544"
+      # TP9 per-rank expert bytes equal TP8 (uniform 384-channel padded extent),
+      # so VRAM margin is thinner than TP8. 2048 still covers the 1544-token
+      # scheduler budget while freeing MoE workspace for CUDA-graph capture.
+      B12X_MOE_WORKSPACE_TOKEN_LIMIT: "2048"
+      B12X_W4A16_STABLE_ROUTE_PACK: "1"
+      B12X_W4A16_PREFILL_FUSED_SUM: "1"
+      VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE: "0"
+      VLLM_COMPUTE_NANS_IN_LOGITS: "1"
+      # ws9 has no FlashInfer autotune cache (the mounted JSON is ws8-only),
+      # so use the topology-aware B12X PCIe all-reduce, which also bypasses
+      # the CustomAllreduce supported-world-size list via the integrated PCIe
+      # path. Fallback knobs if island_rs rejects the asymmetric 5+4 split:
+      # B12X_PCIE_ALLREDUCE_ALGORITHM, then VLLM_ENABLE_PCIE_ALLREDUCE=0.
+      KIMI_PCIE_ALLREDUCE_BACKEND: b12x
+      VLLM_PCIE_ONESHOT_ALLREDUCE_MAX_SIZE: "112KB"
+      VLLM_PCIE_ONESHOT_FUSED_ADD_RMS_NORM_MAX_SIZE: "112KB"
+      VLLM_SERVER_DEV_MODE: "1"
+      # TP9 fine-object protocol: 4,608 global tokens per LMCache object with
+      # 512 attention rows/rank and one complete recurrent state per object.
+      # New producer namespace: TP9 chunk geometry is incompatible with every
+      # DCP8 namespace.
+      LMCACHE_MODE: disk
+      LMCACHE_TRANSFER_MODE: engine_driven
+      LMCACHE_EXPECTED_SOURCE_ROOT: /opt/infernal-invocation/lmcache
+      LMCACHE_SEPARATE_OBJECT_GROUPS: "1"
+      LMCACHE_SERVER_ENV: "CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY PYTHONPATH=/opt/infernal-invocation/b12x:/opt/infernal-invocation/vllm"
+      LMCACHE_SHM_NAME: kimik3_tp9_dcp9_k3_fine4608_heads99_l1_48g_v2
+      LMCACHE_CHUNK_SIZE: "4608"
+      LMCACHE_L1_INIT_GB: "48"
+      LMCACHE_L1_GB: "48"
+      LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT: "1"
+      LMCACHE_L2_PATH: /lmcache/l2
+      LMCACHE_L2_GB: "512"
+      LMCACHE_L2_WORKERS: "4"
+      LMCACHE_MAX_GPU_WORKERS: "9"
+      LMCACHE_MAX_CPU_WORKERS: "4"
+      LMCACHE_PORT: "5555"
+      LMCACHE_HTTP_PORT: "8088"
+      LMCACHE_START_TIMEOUT: "120"
+      LMCACHE_LOG: /tmp/lmcache-mp-8090.log
+      LMCACHE_HEARTBEAT_INTERVAL: "5"
+      LMCACHE_WORKER_REAP_TIMEOUT: "120"
+      LMCACHE_WORKER_REGISTRATION_GRACE: "86400"
+      LMCACHE_KV_LOAD_FAILURE_POLICY: recompute
+    volumes:
+      - /mnt/models/Kimi-K3-QSRT-K2:/model:ro
+      - /mnt/models/Kimi-K3-DSpark-Inferact-BF16:/draft-model:ro
+      - /mnt/models/kimi-k3-production-cache:/cache:rw
+      - /mnt/lmcache-l2/kimik3/l2-tp9-dcp9-k3-fine4608-heads99-v2:/lmcache/l2:rw
+      - /home/g0san/kimi-k3-production/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh:/usr/local/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh:ro
+      - /home/g0san/kimi-k3-production/bin/serve-kimi-k3-tp9-dcp9.sh:/usr/local/bin/serve-kimi-k3-tp9-dcp9.sh:ro
+      - /home/g0san/kimi-k3-production/bin/entrypoint-tp9-colocated-dspark-k3-dcp9.sh:/usr/local/bin/entrypoint-tp9-colocated-dspark-k3-dcp9.sh:ro
+      - /home/g0san/kimi-k3-production/bin/patch-lmcache-mla-only.py:/usr/local/bin/patch-lmcache-mla-only.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-qsrt-odd-shard-tp9.py:/usr/local/bin/patch-qsrt-odd-shard-tp9.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-virtual-tp-head-alignment-tp9.py:/usr/local/bin/patch-virtual-tp-head-alignment-tp9.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-virtual-tp-kda-heads-tp9.py:/usr/local/bin/patch-virtual-tp-kda-heads-tp9.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-b12x-mla-dcp-head-tail-tp9.py:/usr/local/bin/patch-b12x-mla-dcp-head-tail-tp9.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-virtual-tp-dflash-draft-tp9.py:/usr/local/bin/patch-virtual-tp-dflash-draft-tp9.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-kv-connector-skip-dflash-draft-tp9.py:/usr/local/bin/patch-kv-connector-skip-dflash-draft-tp9.py:ro
+    entrypoint:
+      - /usr/local/bin/entrypoint-tp9-colocated-dspark-k3-dcp9.sh

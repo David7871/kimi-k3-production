@@ -1,0 +1,66 @@
+{
+  "_metadata": {
+    "flashinfer_version": "0.6.18+cu133",
+    "cuda_version": "13.3",
+    "cublas_version": "13.6.0",
+    "cudnn_version": "92400",
+    "cudnn_frontend_version": "1.27.0",
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition"
+  },
+  "('flashinfer::pcie_ipc_all_reduce', 'PcieIpcAllReduceRunner', ((1, 7168),), (1, 8, 'pcieswitch-pairs', 128, 43008, 'torch.bfloat16'))": [
+    "PcieIpcAllReduceRunner",
+    [
+      3,
+      8,
+      512
+    ]
+  ],
+  "('flashinfer::pcie_ipc_all_reduce', 'PcieIpcAllReduceRunner', ((1, 7168),), (1, 8, 'pcieswitch-pairs', 128, 57344, 'torch.bfloat16'))": [
+    "PcieIpcAllReduceRunner",
+    [
+      0,
+      64,
+      64
+    ]
+  ],
+  "('flashinfer::pcie_ipc_all_reduce', 'PcieIpcAllReduceRunner', ((2, 7168),), (1, 8, 'pcieswitch-pairs', 128, 43008, 'torch.bfloat16'))": [
+    "PcieIpcAllReduceRunner",
+    [
+      0,
+      96,
+      64
+    ]
+  ],
+  "('flashinfer::pcie_ipc_all_reduce', 'PcieIpcAllReduceRunner', ((2, 7168),), (1, 8, 'pcieswitch-pairs', 128, 57344, 'torch.bfloat16'))": [
+    "PcieIpcAllReduceRunner",
+    [
+      0,
+      128,
+      64
+    ]
+  ],
+  "('flashinfer::pcie_ipc_all_reduce', 'PcieIpcAllReduceRunner', ((4, 7168),), (1, 8, 'pcieswitch-pairs', 128, 43008, 'torch.bfloat16'))": [
+    "PcieIpcAllReduceRunner",
+    [
+      0,
+      64,
+      256
+    ]
+  ],
+  "('flashinfer::pcie_ipc_all_reduce', 'PcieIpcAllReduceRunner', ((4, 7168),), (1, 8, 'pcieswitch-pairs', 128, 57344, 'torch.bfloat16'))": [
+    "PcieIpcAllReduceRunner",
+    [
+      0,
+      96,
+      64
+    ]
+  ],
+  "('flashinfer::pcie_ipc_all_reduce', 'PcieIpcAllReduceRunner', ((8, 7168),), (1, 8, 'pcieswitch-pairs', 128, 57344, 'torch.bfloat16'))": [
+    "PcieIpcAllReduceRunner",
+    [
+      0,
+      128,
+      1024
+    ]
+  ]
+}

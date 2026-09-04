@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Align Kimi-K3 virtual-TP attention head padding with the DCP kernel rule.
+
+B12X_MLA validates that the DCP-gathered query head count (local_heads x
+dcp_world_size) is a multiple of eight. The stock planner pads Kimi-K3 heads
+with local alignment 1, so TP9/DCP9 produces local=11 -> effective 99 and the
+backend refuses to load. Raise the local alignment to 8 / gcd(dcp, 8) for
+Kimi-K3 so every DCP-gathered head count closes complete 8-head blocks:
+
+  TP9/DCP9: alignment 8 -> local 16, padded heads 144 (144 % 8 == 0)
+  TP8/DCP8: gcd(8, 8) == 8 -> alignment 1, unchanged (96 heads, local 12)
+
+The KDA fused-decode kernel only ships template instantiations for local
+head counts 12/24/48/96, so local=16 falls back to the split conv+KDA+norm
+decode path. That fallback is functional; only the fusion is lost.
+"""
+
+import os
+from pathlib import Path
+
+PATH = Path(
+    os.environ.get(
+        "K3PATCH_VIRTUAL_TP",
+        "/opt/infernal-invocation/vllm/vllm/config/virtual_tp.py",
+    )
+)
+MARKER = "kimi-k3-dcp-head-alignment"
+
+OLD = """    attention_head_alignment = _ATTENTION_HEAD_LOCAL_ALIGNMENT if is_deepseek_v4 else 1
+"""
+
+NEW = """    attention_head_alignment = _ATTENTION_HEAD_LOCAL_ALIGNMENT if is_deepseek_v4 else 1
+    # kimi-k3-dcp-head-alignment: B12X_MLA requires the DCP-gathered query
+    # head count (local_heads x dcp_world_size) to be a multiple of eight.
+    # Align Kimi-K3 local heads so the gathered count always closes complete
+    # eight-head blocks; dcp sizes already divisible by 8 keep alignment 1.
+    if _is_kimi_k3_config(model_config):
+        _dcp = max(
+            1, int(getattr(parallel_config, "decode_context_parallel_size", 1))
+        )
+        attention_head_alignment = max(
+            attention_head_alignment, 8 // math.gcd(_dcp, 8)
+        )
+"""
+
+# The DSpark draft's dense MLP is quantized MXFP8 at load time through the
+# speculative config, so its checkpoint config carries no dense_format hint
+# and the stock plan aligns the dense axis to 1. TP9 then produces
+# input_size_per_partition 14337/9 = 1593, violating MXFP8's 32-divisibility.
+# Raise the draft dense alignment floor to 32. TP8 keeps 14336 (1792 local,
+# already 32-aligned), so qualified behavior is unchanged.
+DSPARK_OLD = """        "dense_intermediate_size": _make_virtual_axis(
+            _require_int_attr(text_config, "intermediate_size"),
+            tp_size,
+            _get_dense_linear_local_alignment(model_config),
+        ),
+        "vocab_size": _make_virtual_vocab_axis(
+            _require_int_attr(text_config, "vocab_size"), tp_size
+        ),
+    }
+"""
+
+DSPARK_NEW = """        "dense_intermediate_size": _make_virtual_axis(
+            _require_int_attr(text_config, "intermediate_size"),
+            tp_size,
+            # kimi-k3-dspark-mxfp8-dense-alignment: the draft is quantized
+            # MXFP8 via the speculative config, which requires every local
+            # input extent to close 32-channel blocks.
+            max(32, _get_dense_linear_local_alignment(model_config)),
+        ),
+        "vocab_size": _make_virtual_vocab_axis(
+            _require_int_attr(text_config, "vocab_size"), tp_size
+        ),
+    }
+"""
+
+
+def main() -> None:
+    text = PATH.read_text()
+    if MARKER in text:
+        print(f"virtual_tp already patched: {MARKER}")
+    else:
+        count = text.count(OLD)
+        if count != 1:
+            raise SystemExit(
+                f"ERROR: expected exactly one alignment anchor in {PATH}, found {count}"
+            )
+        text = text.replace(OLD, NEW, 1)
+        compile(text, str(PATH), "exec")
+        PATH.write_text(text)
+        print(f"virtual_tp patched: {MARKER}")
+
+    text = PATH.read_text()
+    dspark_marker = "kimi-k3-dspark-mxfp8-dense-alignment"
+    if dspark_marker in text:
+        print(f"virtual_tp already patched: {dspark_marker}")
+    else:
+        count = text.count(DSPARK_OLD)
+        if count != 1:
+            raise SystemExit(
+                f"ERROR: expected exactly one dspark dense anchor in {PATH}, "
+                f"found {count}"
+            )
+        text = text.replace(DSPARK_OLD, DSPARK_NEW, 1)
+        compile(text, str(PATH), "exec")
+        PATH.write_text(text)
+        print(f"virtual_tp patched: {dspark_marker}")
+
+
+if __name__ == "__main__":
+    main()

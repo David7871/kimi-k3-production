@@ -1,0 +1,35 @@
+# DFlash draft server: captured context ingest, fused per-projection kernels.
+#
+# overlays/draft-ingest-graph-20260902/k3_dspark_rpc.py (served RPC server +
+# vLLM PR branch agent/kimi-k3-draft-ingest-graph-20260902-pr): the per-step
+# context append (the accepted rows of one decode step, 1..16 rows) replays
+# a CUDA graph per row count instead of ~30 eager launches with host gaps,
+# and the probabilistic logits frame is copied through a pinned buffer.
+# overlays/draft-ingest-graph-20260902/k3_dspark_standalone.py: the draft
+# engine uses the CUDA per-token fp8 quantization op, the CUTLASS fp8 GEMM
+# (per-token x per-channel scaling in the epilogue) and the vLLM C RMSNorm
+# kernels, and installs the configured IR op priorities (the standalone
+# runtime has no worker, so without this every IR op ran torch-native).
+# Draft-side only: the target's verification is untouched; draft logits
+# change at fp8 rounding level (GEMM kernel), acceptance is expected to be
+# unchanged within noise.
+# Measured on GPU 0 (second instance, research/decode-step-20260902/
+# out/draft_profile_*.log): proposal 5.89 -> 3.72 ms at batch 2,
+# ~5.0 -> 3.42 ms at batch 1; draft tokens identical between the captured
+# and the eager ingest.
+# The same k3_dspark_rpc.py also carries the top-k draft-distribution
+# transport (vLLM PR #585; dormant until the target requests it with
+# VLLM_K3_DRAFT_LOGITS_TOPK) and K3_DRAFT_LOGITS_MASS_DIAG, which logs the
+# draft probability mass outside the top-k on served traffic so the
+# transport width can be chosen (candidates/k3-draft-topk-logits-20260902).
+# Rollback: drop this override (restores the fp8 draft's torch kernels and
+# eager ingest); K3_DRAFT_INGEST_GRAPH=0 keeps the graphs off at runtime.
+services:
+  kimi-k3-draft:
+    environment:
+      K3_DRAFT_LOGITS_MASS_DIAG: "256,1024,4096,16384"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/draft-ingest-graph-20260902/k3_dspark_standalone.py:/opt/k3-dspark-3090/source/vllm/entrypoints/k3_dspark_standalone.py:ro
+      - /home/g0san/kimi-k3-production/overlays/draft-ingest-graph-20260902/k3_dspark_rpc.py:/opt/k3-dspark-3090/source/vllm/entrypoints/k3_dspark_rpc.py:ro
+    labels:
+      com.mydatacenter.draft-ingest-graph: kimi-k3-draft-ingest-graph-20260902

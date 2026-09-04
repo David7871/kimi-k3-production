@@ -1,0 +1,37 @@
+FROM voipmonitor/vllm@sha256:a54da4e2432138d42334cac54555f3a51188489cb66029da0d96e4b39162d726
+
+LABEL local.mydatacenter.base.digest="sha256:a54da4e2432138d42334cac54555f3a51188489cb66029da0d96e4b39162d726" \
+      local.mydatacenter.vllm.tree="12776c0df15ca4087b636c43004b5bc1fde61434" \
+      local.mydatacenter.b12x.compat.parent="69a61dc29bf39a2f1730f99ad333ea3cb9893e76a36e74e759e64a5a1947f62d" \
+      local.mydatacenter.b12x.pr227="0eba6ae99e0d1fad6ec268d8c291f498ec1dd4d9" \
+      local.mydatacenter.b12x.compat.manifest_sha256="acbe42b83673b9de75b99a7d50caaa16b8e0491a6169e9be0660d927802f2b06" \
+      local.mydatacenter.dspark.speculative_tokens="3" \
+      local.mydatacenter.scheduler.max_batched_tokens="1540" \
+      local.mydatacenter.scheduler.max_scheduled_tokens="1536"
+
+USER root
+RUN rm -rf /opt/kimi-k3-qsrt/b12x/b12x
+COPY b12x-compat-pr227-candidate/b12x /opt/kimi-k3-qsrt/b12x/b12x
+COPY b12x-compat-pr227-candidate/MANIFEST.sha256 /opt/kimi-k3-qsrt/b12x/MANIFEST.pr227.sha256
+COPY overlays/serve-kimi-k3-qsrt-dspark /usr/local/bin/serve-kimi-k3-qsrt-dspark
+COPY serve-kimi-k3-production-tp8-dcp8.sh /usr/local/bin/serve-kimi-k3-production-tp8-dcp8
+RUN chmod 0755 /usr/local/bin/serve-kimi-k3-qsrt-dspark \
+    /usr/local/bin/serve-kimi-k3-production-tp8-dcp8 \
+ && find /opt/kimi-k3-qsrt/b12x/b12x -type d -name __pycache__ -prune -exec rm -rf '{}' + \
+ && find /opt/kimi-k3-qsrt/b12x/b12x -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+
+ENV LOCAL_INFERENCE_CACHE_FINGERPRINT="cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536" \
+    XDG_CACHE_HOME="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536" \
+    VLLM_CACHE_ROOT="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/vllm" \
+    VLLM_CACHE_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/vllm" \
+    TORCH_EXTENSIONS_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/torch-extensions" \
+    TRITON_CACHE_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/triton" \
+    TORCHINDUCTOR_CACHE_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/torchinductor" \
+    VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/flashinfer-autotune" \
+    CUTE_DSL_CACHE_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/cute-dsl" \
+    B12X_CUTE_COMPILE_CACHE_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/b12x/cute" \
+    B12X_COMPILE_CACHE_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/b12x/compile" \
+    SPARKINFER_COMPILE_CACHE_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/b12x/compile" \
+    NUMBA_CACHE_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/numba" \
+    CUDA_CACHE_PATH="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/cuda" \
+    CUPY_CACHE_DIR="/cache/jit/cu133-torch213-kimi-k3-vllm12776c0-b12xcompatacbe42-pr227-sched1536/cupy"

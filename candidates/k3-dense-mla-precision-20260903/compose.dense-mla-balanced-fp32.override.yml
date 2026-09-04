@@ -1,0 +1,13 @@
+# Variant of compose.dense-mla-split-precision.override.yml: balance every
+# request over the launched splits (no single-split threshold) with float32
+# partials. Not bit-identical to the fixed-range kernel at any length above
+# one chunk, but 5-25 % closer to the fp64 reference at every length, and
+# the balanced kernel time at every length (9-10 us instead of 47-125 us
+# per layer at 1k-2.8k local tokens). Apply after the split-precision
+# override; only the threshold differs.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DENSE_MLA_SINGLE_SPLIT_CHUNKS: "0"
+    labels:
+      com.mydatacenter.dense-mla-split-precision: kimi-k3-dense-mla-balanced-fp32-20260903

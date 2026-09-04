@@ -1,0 +1,11 @@
+# Stage-2 tuning knobs under test: route the halves' 5.5 MB latent
+# all-reduce through the DMA ring (ring min 4 MB instead of 6 MB) so the
+# comm stream never runs an NCCL kernel that needs many SMs, replay it too
+# (replay min 4 MiB), and reserve more SMs for the ring's one-block kernels.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_PCIE_DMA_MIN_BYTES: "4MB"
+      B12X_PCIE_DMA_GRAPH_REPLAY_MIN_BYTES: "4194304"
+      B12X_PCIE_DMA_GRAPH_REPLAY_MAX_ENTRIES: "4"
+      B12X_W4A16_RESERVE_SMS: "4"

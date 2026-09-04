@@ -1,0 +1,77 @@
+services:
+  kimi-k3-draft:
+    # Pin the untouched published modal-labs DFlash checkpoint directly.
+    # Do not follow /mnt/models/Kimi-K3-DFlash: that switchable symlink
+    # currently points to an Inferact DSpark checkpoint.
+    environment:
+      VLLM_K3_DRAFT_PREFIX_CACHE_TOKENS: "131072"
+    volumes:
+      - /mnt/models/Kimi-K3-DFlash-stock:/draft-model:ro
+    command:
+      - "--draft-model"
+      - "/draft-model"
+      - "--target-weights"
+      - "/target-weights"
+      - "--target-config"
+      - "/opt/k3-dspark-3090/target-config"
+      - "--method"
+      - "dflash"
+      - "--device"
+      - "0"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8091"
+      - "--num-speculative-tokens"
+      - "3"
+      - "--max-model-len"
+      - "128000"
+      - "--max-num-batched-tokens"
+      - "520"
+      - "--max-num-seqs"
+      - "4"
+      - "--max-retained-requests"
+      - "8"
+      - "--draft-kv-cache-gib"
+      - "32.0"
+      - "--draft-kv-window"
+      - "131072"
+      - "--enable-cuda-graph"
+      - "--cuda-graph-warmups"
+      - "2"
+      - "--proposal-address"
+      - "tcp://127.0.0.1:8092"
+
+  kimi-k3-production:
+    environment:
+      SERVED_MODEL_NAME: claude-mythos-5
+      # Fine-grained recurrent/cache geometry.  One target prefill step is
+      # 512 tokens; the extra eight batched slots retain DFlash bookkeeping
+      # headroom without increasing the scheduled target step.
+      MAMBA_BLOCK_SIZE: "512"
+      PREFIX_MATCH_UNIT: "512"
+      LMCACHE_CHUNK_SIZE: "512"
+      LMCACHE_EXTERNAL_HIT_ALIGN: "512"
+      MAX_NUM_BATCHED_TOKENS: "520"
+      MAX_NUM_SCHEDULED_TOKENS: "512"
+      VLLM_MLA_CHUNKED_PREFILL_WORKSPACE_SIZE: "520"
+      B12X_MOE_WORKSPACE_TOKEN_LIMIT: "520"
+      # A 512-token checkpoint cadence uses roughly six times as many
+      # recurrent state slots as the former 3,072-token profile.  Two GiB per
+      # rank targets a safe 128k context; startup capacity is a hard gate.
+      MAX_MODEL_LEN: "128000"
+      KV_CACHE_MEMORY_BYTES: "2147483648"
+      DFLASH_K: "3"
+      SPECULATIVE_METHOD: dflash
+      DRAFT_ATTENTION_BACKEND: TRITON_ATTN
+      DRAFT_SAMPLE_METHOD: greedy
+      LMCACHE_SHM_NAME: kimik3_mythos5_dflash3_mamba512_chunk512_l1_48g_v1
+      LMCACHE_L2_GB: "256"
+    volumes:
+      - /mnt/models/Kimi-K3-DFlash-stock:/draft-model:ro
+      - /mnt/lmcache-l2/kimik3/l2-mythos5-dflash-stock-mamba512-chunk512-v1:/lmcache/l2:rw
+      - /home/g0san/kimi-k3-production/bin/patch-lmcache-mamba-fine512-validator.py:/usr/local/bin/patch-lmcache-mamba-cadence-validator.py:ro
+    labels:
+      com.mydatacenter.served-model: claude-mythos-5
+      com.mydatacenter.draft: modal-labs-kimi-k3-dflash-stock-0f0bd39d
+      com.mydatacenter.cache-geometry: mamba512-chunk512-prefix512-step512

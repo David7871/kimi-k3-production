@@ -1,0 +1,30 @@
+# Stage 2 of the split prefill: the two row halves run on two threads that
+# alternate at every tensor-parallel all-reduce; each half's collective is
+# issued on one shared comm stream (from a compute-stream snapshot of its
+# input) while the other half computes on the step's compute stream in issue
+# order (overlays: communication_op.py comm region, model.py ubatch-aware
+# AttnRes workspace, k3_ubatch_prefill.py driver). The fused MoE grid leaves
+# B12X_W4A16_RESERVE_SMS SMs free (bin/patch-w4a16-reserve-sms.py, applied by
+# the entrypoint) so the ring's one-block flag/add kernels can run while the
+# MoE executes (measured on GPU 0: without the reservation they wait for the
+# MoE CTAs to retire). Requires the stage-1 override in the same merge;
+# VLLM_K3_UBATCH_PREFILL_OVERLAP=0 keeps the sequential stage-1 behaviour.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_UBATCH_PREFILL: "1"
+      VLLM_K3_UBATCH_PREFILL_MIN_TOKENS: "1024"
+      VLLM_K3_UBATCH_PREFILL_OVERLAP: "1"
+      B12X_W4A16_RESERVE_SMS: "2"
+      # Diagnostics for the maintenance-window run: per-collective CUDA
+      # events and a stall report (trace + half stacks) after 20 s.
+      VLLM_K3_UBATCH_TRACE: "1"
+      VLLM_K3_UBATCH_WATCHDOG_S: "20"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/ubatch-prefill-20260902/communication_op.py:/opt/infernal-invocation/vllm/vllm/distributed/communication_op.py:ro
+      - /home/g0san/kimi-k3-production/overlays/ubatch-prefill-20260902/model.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/model.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-w4a16-reserve-sms.py:/usr/local/bin/patch-w4a16-reserve-sms.py:ro
+      - /home/g0san/kimi-k3-production/overlays/ubatch-prefill-20260902/mla_attention.py:/opt/infernal-invocation/vllm/vllm/model_executor/layers/attention/mla_attention.py:ro
+      - /home/g0san/kimi-k3-production/overlays/ubatch-prefill-20260902/mla.py:/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/mla.py:ro
+    labels:
+      com.mydatacenter.ubatch-prefill-stage2: kimi-k3-split-prefill-stage2-20260902

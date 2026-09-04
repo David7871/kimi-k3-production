@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Boot the issue-75 QSRT runtime with colocated Inferact DSpark K3 at TP9/DCP9.
+# Chains the qualified fine-cache/heartbeat/scheduler/AttnRes patch set, the
+# LMCache MLA-only classifier backport, and the TP9 odd-shard QSRT partition
+# patch before launching the nine-GPU serve script.
+set -euo pipefail
+
+# Apply the already-qualified fine-cache, heartbeat, scheduler, AttnRes, and
+# grammar composition guards to the exact issue-75 source tree. Patch the
+# packaged depth-3 launcher only for its semantic gate; the K3 launcher below
+# is a separate read-only host artifact.
+K3PATCH_ONLY=1 \
+K3PATCH_INNER_LAUNCHER=/usr/local/bin/serve-kimi-k3-qsrt-dspark-r29 \
+  /usr/local/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh
+
+# The issue-75 image predates LMCache PR #4219. Kimi-K3 is hybrid MLA +
+# recurrent attention, so pure-MLA TP rank sharing would restore the wrong
+# recurrent shard on nonzero ranks. Apply and verify the source-compatible
+# classifier backport before any worker imports LMCache.
+python3 /usr/local/bin/patch-lmcache-mla-only.py
+
+# TP9: the pure-K2 QSRT atom partition requires an even shard count in the
+# packaged tree. Patch it to support odd counts (ceil/floor half split) and
+# self-check full coverage for shards 2,4,8,9,12,16.
+python3 /usr/local/bin/patch-qsrt-odd-shard-tp9.py
+
+# TP9: DSpark draft dense axis pinned to 32-channel MXFP8 blocks
+# (14336 -> 14400 at TP9). The former 96->144 MLA head alignment hunk is
+# retired: the head-tile-tail patch below lets the stock 96->99 padding run.
+python3 /usr/local/bin/patch-virtual-tp-head-alignment-tp9.py
+
+# TP9: teach B12X_MLA to pad a non-multiple-of-eight DCP-gathered head
+# count to the 8-row kernel tile (99 -> 104 rows, masked tail) instead of
+# refusing, and guard the padded-path self-copy after the DCP gather.
+python3 /usr/local/bin/patch-b12x-mla-dcp-head-tail-tp9.py
+
+# TP9: register the Qwen3-shaped DFlash draft with virtual-TP padding
+# (q 32->36, KV 8->9, coupled 4:1) so colocated DFlash shards across nine
+# ranks. No-op for the DSpark profile and for TP sizes dividing 32/8.
+python3 /usr/local/bin/patch-virtual-tp-dflash-draft-tp9.py
+
+# TP9: keep colocated DFlash draft SWA layers out of KV-connector
+# registration (interior-padded views are rejected by LMCache, and draft
+# KV is ephemeral). No-op when no DFlash layers exist.
+python3 /usr/local/bin/patch-kv-connector-skip-dflash-draft-tp9.py
+
+# TP9: KDA linear attention must NOT inherit the MLA 144-head padding —
+# that inflates the recurrent state 4/3x and forces attention block 2048,
+# breaking the 1728 fine cadence. Pad KDA separately: 96 -> 108 (local 12,
+# same local geometry as qualified TP8).
+python3 /usr/local/bin/patch-virtual-tp-kda-heads-tp9.py
+
+# Model workers use the patched source trees. The standalone LMCache server gets
+# an explicit source-free PYTHONPATH below so it imports the full installed CLI.
+export PYTHONPATH="/opt/infernal-invocation/lmcache:/opt/infernal-invocation/b12x:/opt/infernal-invocation/vllm:/opt/venv/lib/python3.12/site-packages"
+
+export LMCACHE_MODE="${LMCACHE_MODE:-disk}"
+export LMCACHE_TRANSFER_MODE="${LMCACHE_TRANSFER_MODE:-engine_driven}"
+export LMCACHE_EXPECTED_SOURCE_ROOT="${LMCACHE_EXPECTED_SOURCE_ROOT:-/opt/infernal-invocation/lmcache}"
+export LMCACHE_SEPARATE_OBJECT_GROUPS="${LMCACHE_SEPARATE_OBJECT_GROUPS:-1}"
+export LMCACHE_SERVER_ENV="${LMCACHE_SERVER_ENV-CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY PYTHONPATH=/opt/infernal-invocation/b12x:/opt/infernal-invocation/vllm}"
+export LMCACHE_SHM_NAME="${LMCACHE_SHM_NAME:-kimik3_tp9_dcp9_k3_fine1728_l1_40g_v1}"
+export LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-1728}"
+export LMCACHE_L1_INIT_GB="${LMCACHE_L1_INIT_GB:-40}"
+export LMCACHE_L1_GB="${LMCACHE_L1_GB:-40}"
+export LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT="${LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT:-1}"
+export LMCACHE_L2_GB="${LMCACHE_L2_GB:-512}"
+export LMCACHE_L2_WORKERS="${LMCACHE_L2_WORKERS:-4}"
+export LMCACHE_MAX_GPU_WORKERS="${LMCACHE_MAX_GPU_WORKERS:-9}"
+export LMCACHE_MAX_CPU_WORKERS="${LMCACHE_MAX_CPU_WORKERS:-4}"
+export LMCACHE_PORT="${LMCACHE_PORT:-5555}"
+export LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8088}"
+export LMCACHE_START_TIMEOUT="${LMCACHE_START_TIMEOUT:-120}"
+export LMCACHE_LOG="${LMCACHE_LOG:-/tmp/lmcache-mp-8090.log}"
+export LMCACHE_HEARTBEAT_INTERVAL="${LMCACHE_HEARTBEAT_INTERVAL:-5}"
+export LMCACHE_WORKER_REAP_TIMEOUT="${LMCACHE_WORKER_REAP_TIMEOUT:-120}"
+export LMCACHE_WORKER_REGISTRATION_GRACE="${LMCACHE_WORKER_REGISTRATION_GRACE:-86400}"
+export LMCACHE_KV_LOAD_FAILURE_POLICY="${LMCACHE_KV_LOAD_FAILURE_POLICY:-recompute}"
+
+exec /usr/local/bin/lmcache-mp-wrapper.sh \
+  /usr/local/bin/serve-kimi-k3-tp9-dcp9.sh

@@ -1,0 +1,290 @@
+services:
+  lmcache-shm-preflight:
+    # Remove only unmapped LMCache POSIX SHM pools before a profile switch.
+    # Host PID visibility is required to distinguish stale files from pools
+    # still mapped by another live model owner. Fail closed unless the 48 GiB
+    # direct-SHM pool plus OS/NCCL reserve fits; pickle fallback caused the
+    # 2026-08-29 host-global OOM.
+    image: kimi-k3-production-issue75-dspark@sha256:f18184728c27959de26cf11952d7a8b96e57b513a6badf8bf3e09fd4cda16a76
+    container_name: kimi-k3-shm-preflight
+    restart: "no"
+    network_mode: none
+    pid: host
+    ipc: host
+    privileged: true
+    security_opt:
+      - label=disable
+    volumes:
+      - /home/g0san/kimi-k3-production/bin/lmcache_shm_preflight.py:/usr/local/bin/lmcache_shm_preflight.py:ro
+    entrypoint:
+      - python3
+      - /usr/local/bin/lmcache_shm_preflight.py
+      - --required-gib
+      - "48"
+      - --reserve-gib
+      - "4"
+
+  kimi-k3-draft:
+    # Dedicated BF16 DFlash K7 draft on the 9th GPU (bus 09:00.0, RTX PRO 6000
+    # Workstation Edition, SM 12.0). Same qualified multi-method standalone
+    # runtime image as the DSpark profile; --method dflash selects the
+    # six-layer sliding-window DFlash draft (2026-08-23 remote qualification).
+    image: kimi-k3-dspark-3090:bf16-cudagraph
+    container_name: kimi-k3-draft
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    security_opt:
+      - label=disable
+    ulimits:
+      memlock: -1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+      CUDA_DEVICE_ORDER: PCI_BUS_ID
+      CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+      # Long-context acceptance lever (2026-08-28): the per-layer SWA mask
+      # is 4096, but the ROLLING INGESTION WINDOW bounds how much of a long
+      # prompt the six-layer stack ever sees (rpc.py: first_block =
+      # sequence_end - window). The 08-23 "no improvement" note was measured
+      # on short prompts; Hermes-length sessions draft from deeper context
+      # with a big window while per-step decode cost stays 4096-masked.
+      # prefix cache must be >= window (hard ValueError).
+      VLLM_K3_DRAFT_PREFIX_CACHE_TOKENS: "372736"
+    volumes:
+      - /mnt/models/Kimi-K3-DFlash:/draft-model:ro
+      - /mnt/models/Kimi-K3-QSRT-K2:/target-weights:ro
+      - /mnt/models/kimi-k3-draft3090-cache:/cache:rw
+      # SM 12.0 grouped-op availability gate (the image ships SM86-compiled
+      # grouped cache ops; the gate falls back per-op instead of per-arch).
+      - /home/g0san/kimi-k3-production/bin/patch-dspark-standalone-grouped-op-gate.py:/usr/local/bin/patch-dspark-standalone-grouped-op-gate.py:ro
+      # Prefix reconnect for cache-restored turns (2026-08-28): without this a
+      # source cold-bootstrapped at position N>0 can never be reconnected to,
+      # so every turn of every cached conversation bootstraps the draft cold.
+      - /home/g0san/kimi-k3-production/bin/patch-dspark-reconnect-partial-window.py:/usr/local/bin/patch-dspark-reconnect-partial-window.py:ro
+      - /home/g0san/kimi-k3-production/bin/entrypoint-draft-9thgpu.sh:/usr/local/bin/entrypoint-draft-9thgpu.sh:ro
+    entrypoint:
+      - /usr/local/bin/entrypoint-draft-9thgpu.sh
+    # DFlash K=7 with 2 sequences reserves (7-1) x 2 = 12 lookahead slots;
+    # 1,548 total - 12 = 1,536 scheduled keeps the 1,536-token recurrent
+    # boundary (2026-08-23 qualified draft geometry).
+    command:
+      - "--draft-model"
+      - "/draft-model"
+      - "--target-weights"
+      - "/target-weights"
+      - "--target-config"
+      - "/opt/k3-dspark-3090/target-config"
+      - "--method"
+      - "dflash"
+      - "--device"
+      - "0"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8091"
+      - "--num-speculative-tokens"
+      - "3"
+      - "--max-model-len"
+      - "372000"
+      - "--max-num-batched-tokens"
+      - "3080"
+      - "--max-num-seqs"
+      - "4"
+      - "--max-retained-requests"
+      - "8"
+      # Full-context window: 372,736 = 4096 x 91 >= max_model_len 372,000
+      # (block-aligned for any power-of-two engine block <= 4096). Eight
+      # retained windows x 24 KiB/token = ~68.3 GiB; 72 GiB with slack +
+      # ~12 GiB weights = ~84 of 95.6 GiB on the dedicated GPU0.
+      - "--draft-kv-cache-gib"
+      - "72.0"
+      - "--draft-kv-window"
+      - "372736"
+      - "--enable-cuda-graph"
+      - "--cuda-graph-warmups"
+      - "2"
+      - "--proposal-address"
+      - "tcp://127.0.0.1:8092"
+    stop_grace_period: 30s
+
+  kimi-k3-production:
+    # 9-GPU remote-DFlash profile: TP8/DCP8 QSRT target on the eight Max-Q
+    # GPUs (buses 0c..1e), BF16 DFlash K7 draft on the dedicated 9th GPU via
+    # protocol-v2 ZMQ loopback. Same 2.75 GiB/rank KV reservation as the
+    # qualified remote-DSpark 9-GPU profile (~1.12M tokens).
+    image: kimi-k3-production-issue75-dspark@sha256:087276f1ec791909e71055d655eeadb3b35c246e46f2be21af9d210aa970a60b
+    container_name: kimi-k3-production
+    restart: unless-stopped
+    depends_on:
+      lmcache-shm-preflight:
+        condition: service_completed_successfully
+      kimi-k3-draft:
+        condition: service_started
+    network_mode: host
+    ipc: host
+    security_opt:
+      - label=disable
+    ulimits:
+      memlock: -1
+      stack: 67108864
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      CUDA_DEVICE_ORDER: PCI_BUS_ID
+      # Indices 1..8 = buses 0c,0d,10,11,19,1a,1d,1e (the validated TP8/DCP8
+      # rank order). Index 0 (bus 09) belongs to the draft container.
+      CUDA_VISIBLE_DEVICES: "1,2,3,4,5,6,7,8"
+      CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+      MODEL: /model
+      DRAFT_MODEL: /draft-model
+      PORT: "8090"
+      TP_SIZE: "8"
+      DCP_SIZE: "8"
+      SERVED_MODEL_NAME: Kimi-K3
+      # FlashKDA memory profile: lower the served context ceiling and reduce
+      # the fixed KV reservation together. max_model_len alone would not free
+      # device memory while KV_CACHE_MEMORY_BYTES remains explicit.
+      MAX_MODEL_LEN: "320000"
+      # fine3072 chunked prefill: 3,072 = 2 x 1536 target slots + 2 x 2
+      # lookahead (DFlash K3). Physical attention block STAYS 1536 (no KDA
+      # page padding, KV density unchanged); the snapshot cadence and the
+      # LMCache object rise to 3072. 4096/4608 are impossible at TP8/DCP8:
+      # the DCP attention-manager group is 1536 x 8 = 12,288 tokens/block
+      # and the LMCache chunk must divide it — lattice {3072, 6144, 12288}.
+      # The cadence-validator patch admits 3072-token steps in align mode.
+      # K7 retested 2026-08-28 WITH the 372k window: still net-negative
+      # (decode 35.1 vs 45.4; positions 4-7 stay collapsed ~0.1/0.05/0.03/
+      # 0.01; step 57.7->78ms). Draft quality, not K, binds acceptance.
+      DFLASH_K: "3"
+      MAX_NUM_BATCHED_TOKENS: "3080"
+      # vLLM #53080 accounts for the remote DFlash rows separately, so decode
+      # anchors no longer steal eight slots from the target prefill budget.
+      MAX_NUM_SCHEDULED_TOKENS: "3080"
+      MAX_NUM_SEQS: "4"
+      # fine3072 VRAM contract: 3,076-token capture/eager transients are
+      # ~2/3 of the p4096 attempt that OOM'd at KV 2.0 GiB, and trimming
+      # the MLA workspace from its 4096 default reclaims the rest, so
+      # 2.0 GiB/rank holds ~818k KV tokens (2.2x of 372k) at block-1536
+      # density.
+      KV_CACHE_MEMORY_BYTES: "1879048192"
+      # One launch covers the whole 3,076-token step.
+      VLLM_MLA_CHUNKED_PREFILL_WORKSPACE_SIZE: "3080"
+      GPU_MEMORY_UTILIZATION: "0.985"
+      MAMBA_BLOCK_SIZE: "3072"
+      # Hash on the same 3,072-token cadence as the complete KDA state. The
+      # DCP partial-hit guard only admits an interior 12,288-token attention
+      # block hit when every aligned Mamba group has a complete state at that
+      # boundary, so this enables safe 3,072-token local APC reuse.
+      PREFIX_MATCH_UNIT: "3072"
+      ENABLE_VISION: "0"
+      VLLM_DCP_SHARD_DRAFT: "0"
+      # Remote DFlash proposal RPC on the dedicated draft GPU.
+      VLLM_K3_DRAFT_REMOTE_ADDRESS: tcp://127.0.0.1:8092
+      VLLM_K3_DRAFT_REMOTE_TIMEOUT_MS: "30000"
+      VLLM_K3_DRAFT_TIMING_LOG_INTERVAL: "32"
+      # DFlash was trained on the pre-norm AttnRes mixture consumed by the
+      # following target layer. The legacy prefix-only tap is shape-correct
+      # but materially lowers draft acceptance (vLLM #50487).
+      VLLM_KIMI_K3_AUX_ATTN_RES_STREAM: "1"
+      # All-rank profiling enabled per user; the 2026-08-28 8-rank-export
+      # OOM is mitigated by +64G swap (swapfile2) and short capture windows.
+      K3_PROFILE_RANK0_ONLY: "0"
+      VLLM_PROFILER_DIR: /cache/torch-profile
+      B12X_MOE_WORKSPACE_TOKEN_LIMIT: "3080"
+      B12X_W4A16_STABLE_ROUTE_PACK: "1"
+      B12X_W4A16_PREFILL_FUSED_SUM: "1"
+      # A/B verdicts 2026-08-28: SMEM=0 WORSE (37.4; staged LUT dominates
+      # the trellis hot loop) — default 1 kept. SPLITK first bench was flat
+      # (45.2) but trellis forces whole-tiles and the flag is its only
+      # opt-out; re-armed for the kernel-us direct verdict (mini profile).
+      B12X_W4A16_SMALL_M_SPLITK: "1"
+      VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE: "0"
+      VLLM_COMPUTE_NANS_IN_LOGITS: "1"
+      # ws8 target keeps the tuned FlashInfer PCIe IPC all-reduce. B1 DFlash
+      # verification uses eight rows; B2's 16 rows use the larger-collective
+      # fallback (2026-08-23 qualification).
+      # AR verdict 2026-08-28: b12x island_rs at ws8 benched 39.9 vs
+      # flashinfer 46.8 (3-phase barrier cost beats the uplink-crossing
+      # saving at 56KB decode messages). flashinfer rsag8 stays.
+      KIMI_PCIE_ALLREDUCE_BACKEND: flashinfer-ipc
+      FLASHINFER_AUTOTUNE_DIR: /opt/pcie-pr-audit/autotune
+      VLLM_PCIE_ONESHOT_ALLREDUCE_MAX_SIZE: "112KB"
+      VLLM_PCIE_ONESHOT_FUSED_ADD_RMS_NORM_MAX_SIZE: "112KB"
+      VLLM_SERVER_DEV_MODE: "1"
+      # Fine-object protocol: 3,072 global tokens per LMCache object. NEW
+      # producer namespace: DFlash K7 changes the speculative lifecycle and
+      # rollback depth; never share namespaces across serving-stack changes
+      # (2026-08-21 poisoning lesson).
+      LMCACHE_MODE: disk
+      LMCACHE_TRANSFER_MODE: engine_driven
+      LMCACHE_EXPECTED_SOURCE_ROOT: /opt/infernal-invocation/lmcache
+      LMCACHE_SEPARATE_OBJECT_GROUPS: "1"
+      LMCACHE_SERVER_ENV: "CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY PYTHONPATH=/opt/infernal-invocation/b12x:/opt/infernal-invocation/vllm"
+      LMCACHE_SHM_NAME: kimik3_remote9g_dflash3_fine3072_l1_48g_v1
+      LMCACHE_CHUNK_SIZE: "3072"
+      LMCACHE_L1_INIT_GB: "48"
+      LMCACHE_L1_GB: "48"
+      LMCACHE_SHM_RESERVE_GB: "4"
+      LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT: "1"
+      LMCACHE_L2_PATH: /lmcache/l2
+      LMCACHE_L2_GB: "512"
+      LMCACHE_L2_WORKERS: "4"
+      LMCACHE_MAX_GPU_WORKERS: "8"
+      LMCACHE_MAX_CPU_WORKERS: "4"
+      LMCACHE_PORT: "5555"
+      LMCACHE_HTTP_PORT: "8088"
+      LMCACHE_START_TIMEOUT: "120"
+      LMCACHE_LOG: /tmp/lmcache-mp-8090.log
+      LMCACHE_HEARTBEAT_INTERVAL: "5"
+      LMCACHE_WORKER_REAP_TIMEOUT: "120"
+      LMCACHE_WORKER_REGISTRATION_GRACE: "86400"
+      LMCACHE_KV_LOAD_FAILURE_POLICY: recompute
+      # External-hit alignment (2026-08-28): the hash/Mamba/LMCache cadence is
+      # 3,072 even though the DCP attention scheduler block remains 12,288.
+      # This keeps restored KDA state cacheable while allowing the guarded
+      # partial-hit path to resume inside a physical attention block.
+      LMCACHE_EXTERNAL_HIT_ALIGN: "3072"
+    volumes:
+      - /mnt/models/Kimi-K3-QSRT-K2:/model:ro
+      - /mnt/models/Kimi-K3-DFlash:/draft-model:ro
+      - /mnt/models/kimi-k3-production-cache:/cache:rw
+      - /home/g0san/kimi-k3-production/autotune/pcie_ipc_all_reduce_ws8.json:/opt/pcie-pr-audit/autotune/pcie_ipc_all_reduce_ws8.json:ro
+      - /mnt/lmcache-l2/kimik3/l2-remote-dflash-9gpu-k3-fine3072-mixedguard-v2:/lmcache/l2:rw
+      - /home/g0san/kimi-k3-production/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh:/usr/local/bin/entrypoint-aliases-remote-dspark-r29-fine1536.sh:ro
+      - /home/g0san/kimi-k3-production/candidates/all-compatible-20260829/runtime/serve-kimi-k3-compatible-sm120.sh:/usr/local/bin/serve-kimi-k3-issue75-dflash-k7-dcp8.sh:ro
+      - /home/g0san/kimi-k3-production/bin/entrypoint-issue75-remote-dflash-k7-dcp8.sh:/usr/local/bin/entrypoint-issue75-remote-dflash-k7-dcp8.sh:ro
+      - /home/g0san/kimi-k3-production/bin/lmcache_shm_preflight.py:/usr/local/bin/lmcache_shm_preflight.py:ro
+      - /home/g0san/kimi-k3-production/bin/lmcache_l2_process_generation.py:/usr/local/bin/lmcache_l2_process_generation.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-lmcache-mla-only.py:/usr/local/bin/patch-lmcache-mla-only.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-lmcache-mixed-recurrent-guard.py:/usr/local/bin/patch-lmcache-mixed-recurrent-guard.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-lmcache-mamba-cadence-validator.py:/usr/local/bin/patch-lmcache-mamba-cadence-validator.py:ro
+      # 2026-08-28 reconnect/locality fixes, pinned as file mounts so a
+      # container recreate keeps them (they were applied via docker cp first):
+      # - remote_speculator: draft prefix-reconnect partial-window gate +
+      #   rejection diagnostics
+      # - lmcache_mp_connector: external-hit alignment floor (see
+      #   LMCACHE_EXTERNAL_HIT_ALIGN above)
+      - /home/g0san/kimi-k3-production/overlays/vllm-live-base/vllm/v1/worker/gpu/spec_decode/dspark/remote_speculator.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/spec_decode/dspark/remote_speculator.py:ro
+      - /home/g0san/kimi-k3-production/overlays/vllm-live-base/vllm/distributed/kv_transfer/kv_connector/v1/lmcache_mp_connector.py:/opt/infernal-invocation/vllm/vllm/distributed/kv_transfer/kv_connector/v1/lmcache_mp_connector.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-remote-speculator-timing-detail.py:/usr/local/bin/patch-remote-speculator-timing-detail.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-w4a16-splitk-decode-only.py:/usr/local/bin/patch-w4a16-splitk-decode-only.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-island-rs-ws8.py:/usr/local/bin/patch-island-rs-ws8.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-runner-graph-sync-diag.py:/usr/local/bin/patch-runner-graph-sync-diag.py:ro
+      - /home/g0san/kimi-k3-production/bin/patch-worker-profile-rank0-only.py:/usr/local/bin/patch-worker-profile-rank0-only.py:ro
+    entrypoint:
+      - /usr/local/bin/entrypoint-issue75-remote-dflash-k7-dcp8.sh

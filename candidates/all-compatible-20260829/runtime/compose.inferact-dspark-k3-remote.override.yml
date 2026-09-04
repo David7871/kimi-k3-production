@@ -1,0 +1,49 @@
+services:
+  kimi-k3-draft:
+    environment:
+      # Keep the MLA draft's complete retained context on the dedicated GPU.
+      VLLM_DSPARK_DRAFT_KV_WINDOW: "372736"
+      VLLM_DSPARK_COMPACT_ROPE: "1"
+    command:
+      - "--draft-model"
+      - "/draft-model"
+      - "--target-weights"
+      - "/target-weights"
+      - "--target-config"
+      - "/opt/k3-dspark-3090/target-config"
+      - "--method"
+      - "dspark"
+      - "--device"
+      - "0"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8091"
+      - "--num-speculative-tokens"
+      - "3"
+      - "--max-model-len"
+      - "372000"
+      - "--max-num-batched-tokens"
+      - "3080"
+      - "--max-num-seqs"
+      - "4"
+      - "--max-retained-requests"
+      - "8"
+      - "--draft-kv-cache-gib"
+      - "24.0"
+      - "--draft-kv-window"
+      - "372736"
+      - "--enable-cuda-graph"
+      - "--cuda-graph-warmups"
+      - "2"
+      - "--proposal-address"
+      - "tcp://127.0.0.1:8092"
+
+  kimi-k3-production:
+    environment:
+      DFLASH_K: "3"
+      SPECULATIVE_METHOD: dspark
+      DRAFT_ATTENTION_BACKEND: B12X_MLA
+      # The remote protocol currently returns proposal tokens, not the draft
+      # distribution required by probabilistic sampling.
+      DRAFT_SAMPLE_METHOD: greedy

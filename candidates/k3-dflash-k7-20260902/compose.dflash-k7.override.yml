@@ -1,0 +1,53 @@
+# Measurement profile: DFlash speculative depth K=7 (target and draft).
+#
+# Decode-step cost is F (fixed: dense projections, DCP exchange, draft
+# round trip, host) plus the W4A16 MoE verify launch, which is linear in
+# routed rows (m = K+1 tokens x 16 experts). At short context F ~ 33 ms
+# and MoE(m=4) ~ 19 ms, so K=3 (acceptance ~2.6) beats K=7 (~3.3); K=7 wins
+# once F exceeds ~52 ms, which long contexts (MLA/KDA/DCP work per step
+# grows with sequence length) may reach. This override exists to measure
+# that crossover on realistic 100k+ token sessions; it is not the served
+# default. CUDA graphs capture the verify shapes up to 16 tokens, which
+# covers K=7 at max_num_seqs=2 and K=3 at 4.
+services:
+  kimi-k3-production:
+    environment:
+      DFLASH_K: "7"
+  kimi-k3-draft:
+    command:
+      - "--draft-model"
+      - "/draft-model"
+      - "--target-weights"
+      - "/target-weights"
+      - "--target-config"
+      - "/opt/k3-dspark-3090/target-config"
+      - "--method"
+      - "dflash"
+      - "--device"
+      - "0"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8091"
+      - "--num-speculative-tokens"
+      - "7"
+      - "--max-model-len"
+      - "1048576"
+      - "--max-num-batched-tokens"
+      - "1536"
+      - "--max-num-seqs"
+      - "4"
+      - "--max-retained-requests"
+      - "8"
+      - "--draft-kv-cache-gib"
+      - "8.0"
+      - "--draft-kv-window"
+      - "32768"
+      - "--enable-cuda-graph"
+      - "--cuda-graph-warmups"
+      - "2"
+      - "--proposal-address"
+      - "tcp://127.0.0.1:8092"
+      - "--draft-quantization"
+      - "fp8_per_channel"
+      - "--draft-fp8-head"

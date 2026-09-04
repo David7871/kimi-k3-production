@@ -1,0 +1,22 @@
+# Rotated-destination PCIe peer KV gather for DCP chunked prefill.
+# The served direct_dcp_kv_gather_peer_kernel pushes each rank's context KV
+# slice to every peer destination-major, so all eight sources funnel into
+# one destination's inbound PCIe link at a time: measured 3.8 ms per
+# 24,576-token context piece (~3.7 GB/s per rank against a ~25 GB/s link),
+# 273 ms per 1,536-token chunk at 90k context (15% of the chunk, growing
+# linearly with context). The rotated kernel assigns destinations per block
+# offset by the source rank so every inbound link is busy at once; payload,
+# layout and completion protocol are unchanged (byte-identical result).
+# Extension: overlays/dcp-gather-rotate-20260902/_C_k3ext.abi3.so
+# (src/k3ext_dcp_gather.cu, built by build.sh inside the production image);
+# dispatch: overlays/dcp-gather-rotate-20260902/dcp_utils.py, enabled by
+# VLLM_K3_DCP_GATHER_ROTATE_LIB (unset = base kernel).
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DCP_GATHER_ROTATE_LIB: /opt/k3ext/_C_k3ext.abi3.so
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-rotate-20260902/_C_k3ext.abi3.so:/opt/k3ext/_C_k3ext.abi3.so:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-rotate-20260902/dcp_utils.py:/opt/infernal-invocation/vllm/vllm/v1/attention/ops/dcp_utils.py:ro
+    labels:
+      com.mydatacenter.dcp-gather-rotate: kimi-k3-dcp-gather-rotate-20260902

@@ -1,0 +1,12 @@
+services:
+  kimi-k3-draft:
+    volumes:
+      - /mnt/models/Kimi-K3-DFlash-t1-llmconduit-20260831-r2-acceptance/final:/draft-model:ro
+    labels:
+      com.mydatacenter.draft: t1-llmconduit-20260831-r2-09085e522048
+
+  kimi-k3-production:
+    volumes:
+      - /mnt/models/Kimi-K3-DFlash-t1-llmconduit-20260831-r2-acceptance/final:/draft-model:ro
+    labels:
+      com.mydatacenter.draft: t1-llmconduit-20260831-r2-09085e522048

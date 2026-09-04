@@ -1,0 +1,23 @@
+# Launch-grid bound for the rotated DCP peer KV gather, on top of
+# compose.dcp-gather-pipeline.override.yml. The gather kernel is PCIe-bound
+# but launched with up to 1,024 resident blocks (5.4 per SM at 256 threads),
+# which hold the SM thread and register slots the attention and projection
+# kernels of the pipelined loop need on the compute stream; with the full
+# grid the pipelined 128k prefill measured the same throughput as the serial
+# loop (1,266 vs 1,271 tok/s). The bound is read from
+# /opt/k3ext/tuning/gather_blocks (first integer, re-read at most once per
+# second; overlays/dcp-gather-pipeline-20260902/tuning/ on the host) so it
+# can be swept on the running server; VLLM_K3_DCP_GATHER_MAX_BLOCKS is the
+# load-time default used when the file is absent or invalid.
+# Extension: overlays/dcp-gather-pipeline-20260902/_C_k3ext.blockcap.abi3.so
+# (same source as the served build plus max_peer_blocks()).
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_K3_DCP_GATHER_MAX_BLOCKS: "16"
+      VLLM_K3_DCP_GATHER_MAX_BLOCKS_FILE: /opt/k3ext/tuning/gather_blocks
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/_C_k3ext.blockcap.abi3.so:/opt/k3ext/_C_k3ext.abi3.so:ro
+      - /home/g0san/kimi-k3-production/overlays/dcp-gather-pipeline-20260902/tuning:/opt/k3ext/tuning:ro
+    labels:
+      com.mydatacenter.dcp-gather-blockcap: kimi-k3-dcp-gather-blockcap-20260902

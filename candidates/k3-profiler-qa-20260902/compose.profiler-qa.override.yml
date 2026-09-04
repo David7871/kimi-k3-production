@@ -1,0 +1,41 @@
+# Bounded rank-0 torch profiler capture (QA procedure).
+#
+# The serve script passes --profiler-config.profiler=torch and the trace
+# directory when VLLM_PROFILER_DIR is set, and appends VLLM_PROFILER_EXTRA_ARGS
+# verbatim. With max_iterations=4 every POST /start_profile records the next
+# four worker steps on rank 0 only (K3_PROFILE_RANK0_ONLY, see
+# bin/patch-worker-profile-rank0-only.py) and then exports automatically:
+# four 1,536-token prefill chunks, or four decode steps. ignore_frontend=true
+# keeps the API-server CPU profiler off. Traces land under
+# /mnt/models/kimi-k3-production-cache/torch-profile/qa-20260902-0400 on the
+# host. Python stack capture (torch_profiler_with_stack) is off: with it on,
+# the rank-0 export of a four-chunk prefill capture ran past the execute
+# RPC timeout and killed EngineCore (2026-09-02). Remove this override for
+# production runs. After an automatic stop the worker profiler stays active
+# and ignores the next POST /start_profile until POST /stop_profile is sent
+# (research/prefill-w4a16-20260902/profile/capture.py does this).
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_PROFILER_DIR: /cache/torch-profile/qa-20260902-0420
+      VLLM_PROFILER_EXTRA_ARGS: >-
+        --profiler-config.torch_profiler_with_stack=false
+        --profiler-config.torch_profiler_record_shapes=false
+        --profiler-config.torch_profiler_with_memory=false
+        --profiler-config.torch_profiler_with_flops=false
+        --profiler-config.torch_profiler_use_gzip=true
+        --profiler-config.torch_profiler_dump_cuda_time_total=false
+        --profiler-config.ignore_frontend=true
+        --profiler-config.delay_iterations=0
+        --profiler-config.max_iterations=4
+        --profiler-config.warmup_iterations=0
+        --profiler-config.active_iterations=5
+        --profiler-config.wait_iterations=0
+      K3_PROFILE_RANK0_ONLY: "1"
+      # The rank-0 export runs inside the worker step. With stack capture off
+      # a four-chunk prefill trace exports in ~16 s, inside the default
+      # 300 s execute-model RPC timeout. Do not raise that timeout here: a
+      # worker exception (e.g. the 2026-09-02 rank-0 CUDA OOM) is only
+      # promoted to EngineDead and an automatic restart after it expires.
+    labels:
+      com.mydatacenter.profiler-qa: kimi-k3-profiler-qa-20260902

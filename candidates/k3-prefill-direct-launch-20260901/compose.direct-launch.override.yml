@@ -1,0 +1,14 @@
+# Direct eager call of the b12x dynamic MoE launch (bypasses the torch custom-op
+# dispatcher wrapper) on top of the memoized execution plan. The overlay file
+# overlays/prefill-direct-launch-20260901/b12x_fused_moe_impl.py is the
+# plan-cache overlay plus the kimi-k3-direct-dynamic-launch patch.
+# Rollback: drop this file (plan-cache mount remains) or set
+# B12X_DIRECT_DYNAMIC_LAUNCH=0.
+services:
+  kimi-k3-production:
+    environment:
+      B12X_DIRECT_DYNAMIC_LAUNCH: "1"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/prefill-direct-launch-20260901/b12x_fused_moe_impl.py:/opt/infernal-invocation/b12x/b12x/moe/fused_moe/_impl.py:ro
+    labels:
+      com.mydatacenter.moe-direct-launch: kimi-k3-direct-dynamic-launch-20260901

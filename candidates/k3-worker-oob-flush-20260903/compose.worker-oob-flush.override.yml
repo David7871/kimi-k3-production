@@ -1,0 +1,22 @@
+# Out-of-band RPC flush for the deferred draft resolve (vLLM PR #610;
+# overlays/worker-oob-flush-20260903/). With VLLM_K3_DRAFT_DEFERRED_RESOLVE=1
+# a step's asynchronous output is completed by the next step; the executor
+# answers RPCs in order, so an RPC issued between two steps (profile,
+# sleep/wake_up, LoRA, save_sharded_state, collective_rpc) deadlocked the
+# engine against the worker (2026-09-03 06:33 UTC, /stop_profile, 13 min
+# outage). The worker busy loop now completes the in-flight output before
+# any RPC other than execute_model/sample_tokens, and profile() drains the
+# device before the torch profiler starts or stops.
+# model_runner.py replaces the deferred-resolve overlay of the same path
+# (that file plus GPUModelRunner.flush_deferred_draft); gpu_worker.py is
+# the branch file with bin/patch-worker-profile-rank0-only.py pre-applied
+# (the boot patch then reports "already patched"); multiproc_executor.py is
+# the branch file (the image's copy equals the branch base).
+services:
+  kimi-k3-production:
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/worker-oob-flush-20260903/model_runner.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/model_runner.py:ro
+      - /home/g0san/kimi-k3-production/overlays/worker-oob-flush-20260903/gpu_worker.py:/opt/infernal-invocation/vllm/vllm/v1/worker/gpu_worker.py:ro
+      - /home/g0san/kimi-k3-production/overlays/worker-oob-flush-20260903/multiproc_executor.py:/opt/infernal-invocation/vllm/vllm/v1/executor/multiproc_executor.py:ro
+    labels:
+      com.mydatacenter.worker-oob-flush: kimi-k3-worker-oob-flush-20260903

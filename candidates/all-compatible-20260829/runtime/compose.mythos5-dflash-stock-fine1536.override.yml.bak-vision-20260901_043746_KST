@@ -1,0 +1,92 @@
+services:
+  lmcache-shm-preflight:
+    # Raw SHM bytes do not persist LMCache's L1 key/allocation index. Remove
+    # all unmapped arenas so the server creates a fresh 80 GiB direct-SHM pool.
+    entrypoint:
+      - python3
+      - /usr/local/bin/lmcache_shm_preflight.py
+      - --required-gib
+      - "80"
+      - --reserve-gib
+      - "4"
+
+  kimi-k3-draft:
+    # Untouched published modal-labs DFlash checkpoint, pinned directly.
+    environment:
+      VLLM_K3_DRAFT_PREFIX_CACHE_TOKENS: "372736"
+    volumes:
+      - /mnt/models/Kimi-K3-DFlash-stock:/draft-model:ro
+    command:
+      - "--draft-model"
+      - "/draft-model"
+      - "--target-weights"
+      - "/target-weights"
+      - "--target-config"
+      - "/opt/k3-dspark-3090/target-config"
+      - "--method"
+      - "dflash"
+      - "--device"
+      - "0"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8091"
+      - "--num-speculative-tokens"
+      - "3"
+      - "--max-model-len"
+      - "1048576"
+      - "--max-num-batched-tokens"
+      - "1536"
+      - "--max-num-seqs"
+      - "4"
+      - "--max-retained-requests"
+      - "8"
+      - "--draft-kv-cache-gib"
+      - "72.0"
+      - "--draft-kv-window"
+      - "372736"
+      - "--enable-cuda-graph"
+      - "--cuda-graph-warmups"
+      - "2"
+      - "--proposal-address"
+      - "tcp://127.0.0.1:8092"
+
+  kimi-k3-production:
+    environment:
+      SERVED_MODEL_NAME: claude-mythos-5
+      # Keep every reusable boundary on the runtime's minimum physical page.
+      MAMBA_BLOCK_SIZE: "1536"
+      PREFIX_MATCH_UNIT: "1536"
+      LMCACHE_CHUNK_SIZE: "1536"
+      LMCACHE_EXTERNAL_HIT_ALIGN: "1536"
+      MAX_NUM_BATCHED_TOKENS: "1536"
+      MAX_NUM_SCHEDULED_TOKENS: "1536"
+      VLLM_MLA_CHUNKED_PREFILL_WORKSPACE_SIZE: "1536"
+      B12X_MOE_WORKSPACE_TOKEN_LIMIT: "1536"
+      MAX_MODEL_LEN: "1048576"
+      # Qualified on this host at 1,522,451 physical tokens (1.45x the full
+      # 1,048,576-token model context). Keep the explicit capacity gate in the
+      # cutover script because persistent GPU headroom is intentionally tight.
+      KV_CACHE_MEMORY_BYTES: "3221225472"
+      DFLASH_K: "3"
+      SPECULATIVE_METHOD: dflash
+      DRAFT_ATTENTION_BACKEND: TRITON_ATTN
+      DRAFT_SAMPLE_METHOD: greedy
+      # 80 GiB L1 tier against the remounted 96 GiB /dev/shm (fstab-persisted);
+      # RAM 124 GiB fits it with swap absorbing cold pages. Name bump opens a
+      # fresh pool generation.
+      LMCACHE_SHM_NAME: kimik3_mythos5_dflash3_mamba1536_chunk1536_l1_80g_v1
+      LMCACHE_L1_INIT_GB: "80"
+      LMCACHE_L1_GB: "80"
+      # fs_native adapter interprets GB as GiB (x2^30): 2457.6 GiB = 2.4 TiB,
+      # sized against the 3.0 TiB /dev/md127 with ~440 GiB slack left over.
+      LMCACHE_L2_GB: "2457.6"
+      # Normal thread-pool ceiling for CPU-side handlers; 7950X has 16 cores.
+      LMCACHE_MAX_CPU_WORKERS: "16"
+    volumes:
+      - /mnt/models/Kimi-K3-DFlash-stock:/draft-model:ro
+      - /mnt/lmcache-l2/kimik3/l2-mythos5-dflash-stock-mamba1536-chunk1536-v1:/lmcache/l2:rw
+    labels:
+      com.mydatacenter.served-model: claude-mythos-5
+      com.mydatacenter.draft: modal-labs-kimi-k3-dflash-stock-0f0bd39d
+      com.mydatacenter.cache-geometry: physical1536-mamba1536-chunk1536-prefix1536-step1536

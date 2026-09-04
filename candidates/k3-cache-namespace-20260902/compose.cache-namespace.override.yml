@@ -1,0 +1,49 @@
+# LMCache cache namespace + L1/L2 integrity fixes (Kimi-K3 production).
+#
+# Namespace: the LMCache connector prefixes every request's cache_salt with
+# LMCACHE_CACHE_NAMESPACE (LMCache PR #39, overlay lmcache_mp_connector.py =
+# the served connector with the mixed-recurrent guard applied + the namespace
+# patch; api.py exposes the salt limits). The value comes from
+# bin/k3-compose-up.sh, which fingerprints the merged configuration (image id,
+# every bind-mounted file, model directories, engine environment) and maps
+# accepted fingerprints (NAMESPACE.json in the L2 directory) to the production
+# namespace "legacy" (= the empty salt existing entries carry); any other
+# configuration boots into an isolated iso-<fingerprint> namespace.
+# LMCACHE_REQUIRE_CACHE_NAMESPACE=1 makes a boot without a decided namespace
+# fail at connector construction instead of sharing the production keys.
+#
+# L1 integrity (LMCache PR #38, overlays l1_manager.py, eviction_controller.py,
+# engine_driven_transfer.py): an object reserved for write and never finished
+# is never readable (write_pending), expired reservations are discarded by the
+# write-back flush, and a reaped worker's pending writes are force-deleted
+# instead of published.
+#
+# Connector hardening (LMCache PR #42, in the same connector overlay and
+# vllm_multi_process_adapter.py): the store window bound follows the
+# scheduler's num_computed_tokens (rewound for rejected draft tokens) instead
+# of accumulating scheduled counts; a retrieve the scheduler could not issue
+# is reported to the worker as a failed load (fail_retrieve) so vLLM
+# recomputes instead of waiting forever. Overlapping engine steps (the
+# default async scheduling) stay allowed: the store window is bounded by the
+# request's verified tokens (len(all_token_ids)), never by the in-flight
+# placeholder count.
+#
+# The connector and adapter mounts stay writable:
+# bin/patch-lmcache-mixed-recurrent-guard.py and the alias entrypoint rewrite
+# them in place at boot (idempotent; the overlays already carry every edit,
+# so the rewrites are no-ops).
+# Rollback: drop this override and launch without bin/k3-compose-up.sh.
+services:
+  kimi-k3-production:
+    environment:
+      LMCACHE_CACHE_NAMESPACE: "${K3_CACHE_NAMESPACE:?set by bin/k3-compose-up.sh}"
+      LMCACHE_REQUIRE_CACHE_NAMESPACE: "1"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/cache-namespace-20260902/lmcache_mp_connector.py:/opt/infernal-invocation/lmcache/lmcache/integration/vllm/lmcache_mp_connector.py
+      - /home/g0san/kimi-k3-production/overlays/cache-namespace-20260902/vllm_multi_process_adapter.py:/opt/infernal-invocation/lmcache/lmcache/integration/vllm/vllm_multi_process_adapter.py
+      - /home/g0san/kimi-k3-production/overlays/cache-namespace-20260902/api.py:/opt/infernal-invocation/lmcache/lmcache/v1/distributed/api.py:ro
+      - /home/g0san/kimi-k3-production/overlays/cache-namespace-20260902/l1_manager.py:/opt/infernal-invocation/lmcache/lmcache/v1/distributed/l1_manager.py:ro
+      - /home/g0san/kimi-k3-production/overlays/cache-namespace-20260902/eviction_controller.py:/opt/infernal-invocation/lmcache/lmcache/v1/distributed/storage_controllers/eviction_controller.py:ro
+      - /home/g0san/kimi-k3-production/overlays/cache-namespace-20260902/engine_driven_transfer.py:/opt/infernal-invocation/lmcache/lmcache/v1/multiprocess/modules/engine_driven_transfer.py:ro
+    labels:
+      com.mydatacenter.cache-namespace: kimi-k3-cache-namespace-20260902

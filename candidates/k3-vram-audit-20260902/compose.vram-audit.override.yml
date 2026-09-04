@@ -1,0 +1,16 @@
+# Device-memory audit of the serving target: every worker records the
+# caching allocator's history from device init and dumps a per-rank live
+# snapshot on SIGUSR1 (bin/patch-worker-memory-audit.py, applied by the
+# entrypoint). Diagnostic only; the recording adds host-side cost per
+# allocation, so disable it again after the audit boot.
+# Dump:   docker exec kimi-k3-production bash -c 'kill -USR1 $(pgrep -f Worker_TP0_DCP0)'
+# Read:   research/vram-audit-20260902/analyze_snapshot.py <pickle>
+services:
+  kimi-k3-production:
+    environment:
+      K3_MEMORY_AUDIT: "1"
+      K3_MEMORY_AUDIT_DIR: /cache/memory-audit
+    volumes:
+      - /home/g0san/kimi-k3-production/bin/patch-worker-memory-audit.py:/usr/local/bin/patch-worker-memory-audit.py:ro
+    labels:
+      com.mydatacenter.vram-audit: kimi-k3-vram-audit-20260902

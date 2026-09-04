@@ -1,0 +1,14 @@
+# Prefill-size all-reduces on the b12x CE-driven PCIe ring (DmaAllReduce)
+# while decode-size one-shot shapes stay on FlashInfer PCIe IPC.
+# overlays/dma-allreduce-20260901/custom_all_reduce.py is the 2026-08-28
+# hybrid patch (29 lines vs the fork file). Tensors >= VLLM_PCIE_DMA_MIN_BYTES
+# use the DMA ring; set it to "off" (or drop this file) to return to PyNCCL.
+services:
+  kimi-k3-production:
+    environment:
+      VLLM_PCIE_DMA_MIN_BYTES: "6MB"
+    volumes:
+      - /home/g0san/kimi-k3-production/overlays/dma-allreduce-20260901/custom_all_reduce.py:/opt/infernal-invocation/vllm/vllm/distributed/device_communicators/custom_all_reduce.py:ro
+      - /home/g0san/kimi-k3-production/overlays/dma-allreduce-20260901/cuda_communicator.py:/opt/infernal-invocation/vllm/vllm/distributed/device_communicators/cuda_communicator.py:ro
+    labels:
+      com.mydatacenter.dma-allreduce: b12x-dma-large-20260901
