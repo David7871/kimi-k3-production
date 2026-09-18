@@ -1,0 +1,107 @@
+{
+  "image_id": "sha256:9a0a5818b664e263ca68aba772f76ae2b2948e97e42d6bbfd0c3859507e76b30",
+  "path": "/bin/bash",
+  "args": [
+    "/runtime/serve_tp9.sh"
+  ],
+  "started_at": "2026-09-18T02:14:45.923198495Z",
+  "mounts": [
+    {
+      "target": "/opt/k3kda/_C_k3kda.abi3.so",
+      "read_only": true,
+      "role": "runtime overlay",
+      "source_basename": "_C_k3kda.abi3.so"
+    },
+    {
+      "target": "/model",
+      "read_only": true,
+      "role": "model",
+      "source_basename": "Kimi-K3-QSRT-K2"
+    },
+    {
+      "target": "/draft-model",
+      "read_only": true,
+      "role": "model",
+      "source_basename": "Kimi-K3-DFlash2"
+    },
+    {
+      "target": "/cache",
+      "read_only": false,
+      "role": "state",
+      "source_basename": "kimi-k3-production-cache"
+    },
+    {
+      "target": "/lmcache/l2",
+      "read_only": false,
+      "role": "state",
+      "source_basename": "l2-tp9-dcp9-prod"
+    },
+    {
+      "target": "/runtime/lmcache-mp-wrapper.sh",
+      "read_only": false,
+      "role": "runtime overlay",
+      "source_basename": "lmcache-mp-wrapper.sh"
+    },
+    {
+      "target": "/runtime/serve_tp9.sh",
+      "read_only": true,
+      "role": "runtime overlay",
+      "source_basename": "serve_tp9.sh"
+    },
+    {
+      "target": "/opt/infernal-invocation/vllm/vllm/models/kimi_k3/nvidia/kda.py",
+      "read_only": true,
+      "role": "runtime overlay",
+      "source_basename": "kda.py"
+    }
+  ],
+  "host": {
+    "NetworkMode": "host",
+    "IpcMode": "host",
+    "Runtime": "runc",
+    "DeviceRequests": [
+      {
+        "Driver": "nvidia",
+        "Count": -1,
+        "DeviceIDs": null,
+        "Capabilities": [
+          [
+            "gpu"
+          ]
+        ],
+        "Options": null
+      }
+    ],
+    "Ulimits": [
+      {
+        "Name": "nofile",
+        "Hard": 1048576,
+        "Soft": 1048576
+      },
+      {
+        "Name": "memlock",
+        "Hard": -1,
+        "Soft": -1
+      },
+      {
+        "Name": "stack",
+        "Hard": 67108864,
+        "Soft": 67108864
+      },
+      {
+        "Name": "core",
+        "Hard": 0,
+        "Soft": 0
+      }
+    ],
+    "RestartPolicy": {
+      "Name": "unless-stopped",
+      "MaximumRetryCount": 0
+    },
+    "CapAdd": null,
+    "SecurityOpt": [
+      "label=disable"
+    ]
+  },
+  "note": "Host-specific mount parents omitted; container paths and mount modes preserved."
+}

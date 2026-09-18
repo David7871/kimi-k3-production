@@ -1,0 +1,296 @@
+# Frozen from the inspected TP9 production environment; see source-lock.json.
+name: kimi-k3-qsrt
+services:
+  kimi:
+    image: ${KIMI_IMAGE:-ghcr.io/myshytf/kimi-k3:runtime-20260918}
+    build:
+      context: .
+    pull_policy: never
+    platform: linux/amd64
+    command: []
+    entrypoint: ["/bin/bash", "/runtime/entrypoint.sh"]
+    depends_on:
+      shm-preflight:
+        condition: service_completed_successfully
+    network_mode: host
+    ipc: host
+    restart: unless-stopped
+    security_opt: ["label=disable"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ulimits:
+      memlock: -1
+      stack: 67108864
+      core: 0
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    environment:
+      B12X_COMPILE_CACHE_DIR: "/cache/tp9-colocated-prod/6e5fff3911585dfd/b12x/compile"
+      B12X_CUTE_COMPILE_CACHE_DIR: "/cache/tp9-colocated-prod/6e5fff3911585dfd/b12x/cute"
+      B12X_DENSE_NARROW_SPLITK_MAX: "8"
+      B12X_DENSE_SPLITK_TURBO: "0"
+      B12X_DIRECT_DYNAMIC_LAUNCH: "1"
+      B12X_DYNAMIC_TILE_MN: "64x128"
+      B12X_MLA_SM120_BALANCED_WAVES: "1"
+      B12X_MLA_SM120_GLM_FASTPATH: "1"
+      B12X_MLA_SM120_GLM_W_HW_DEQUANT: "0"
+      B12X_MOE_PLAN_CACHE_SIZE: "8192"
+      B12X_MOE_WORKSPACE_TOKEN_LIMIT: "1536"
+      B12X_PCIE_ALLREDUCE_ALGORITHM: "auto"
+      B12X_PCIE_DCP_A2A_TRANSPORT: "push"
+      B12X_PCIE_DCP_GATHER_GROUPS: "${K3_PCIE_GROUPS:-0,1,2,3,8;4,5,6,7}"
+      B12X_PCIE_DMA_GRAPH_REPLAY: "1"
+      B12X_PCIE_DMA_GRAPH_REPLAY_MAX_ENTRIES: "4"
+      B12X_PCIE_DMA_GRAPH_REPLAY_MIN_BYTES: "8388608"
+      B12X_PCIE_DMA_PIPELINED_GATHER: "0"
+      B12X_PCIE_DMA_THREADS: "128"
+      B12X_PCIE_RING_FP32_HOPS: "1"
+      B12X_PCIE_RING_GRANULE_ROWS: "128"
+      B12X_PCIE_TP9_STATIC_PEERS: "1"
+      B12X_SOURCE_DIR: "/opt/venv/lib/python3.12/site-packages"
+      B12X_SQG_XOR_CHEB_T12_DECODE_CHAIN: "funnel"
+      B12X_SQG_XOR_CHEB_T12_DIRECT_SMEM: "1"
+      B12X_W4A16_CROSS_TILE_PREFETCH: "1"
+      B12X_W4A16_FUSED_COOPERATIVE: "0"
+      B12X_W4A16_FUSED_SM_RESERVE: "2"
+      B12X_W4A16_GROUP_BUILDER_INLINE: "1"
+      B12X_W4A16_GROUP_TASK_CURSOR: "1"
+      B12X_W4A16_INLINE_GROUP_DIAGNOSTICS: "1"
+      B12X_W4A16_M8_CTA_THREADS: "256"
+      B12X_W4A16_PREFILL_FUSED_SUM: "1"
+      B12X_W4A16_REFERENCE_GROUPED: "1"
+      B12X_W4A16_REFERENCE_GROUPED_PHASES: "fc2"
+      B12X_W4A16_SMALL_M_SPLITK: "1"
+      B12X_W4A16_STABLE_ROUTE_PACK: "1"
+      B12X_W4A16_TOKEN_MAJOR_ROTATION: "1"
+      B12X_W4A16_TOPK_SUM_OUTPUT: "bf16"
+      CUDA_ARCH_LIST: "7.5 8.0 8.6 9.0 10.0 12.0"
+      CUDA_BINARY_LOADER_THREAD_COUNT: "8"
+      CUDA_CACHE_PATH: "/cache/tp9-colocated-prod/6e5fff3911585dfd/cuda"
+      CUDA_COMPONENT_LIST: "crt nvrtc driver-dev culibos-dev cudart cudart-dev nvcc tileiras"
+      CUDA_COREDUMP_FILE: "/cache/tp9-colocated/coredumps/core_%h_%p_%t.nvcudmp"
+      CUDA_COREDUMP_GENERATION_FLAGS: "skip_nonrelocated_elf_images,skip_global_memory,skip_shared_memory,skip_local_memory,skip_constbank_memory"
+      CUDA_COREDUMP_SHOW_PROGRESS: "1"
+      CUDA_DEVICE_ORDER: "PCI_BUS_ID"
+      CUDA_DRIVER_VERSION: "610.43.02"
+      CUDA_ENABLE_COREDUMP_ON_EXCEPTION: "1"
+      CUDA_HOME: "/usr/local/cuda"
+      CUDA_MODULE_LOADING: "LAZY"
+      CUDA_VERSION: "13.3.1.008"
+      CUDA_VISIBLE_DEVICES: "${K3_GPU_ORDER:-1,2,3,4,5,6,7,8,0}"
+      DCP_SIZE: "9"
+      DRAFT_MODEL: "/draft-model"
+      DRAFT_SAMPLE_METHOD: "probabilistic"
+      K3_PROFILE_RANK0_ONLY: "1"
+      K3_TP9_AR_ROUTE: "push"
+      K3_TP9_DRAFT_KV_DTYPE: "fp8"
+      K3_TP9_KV_BYTES: "3435973836"
+      K3_TP9_MAX_MODEL_LEN: "1048576"
+      K3_TP9_SOURCE_ID: "6e5fff3911585dfd"
+      K3_TP9_SPEC_TOKENS: "3"
+      K3_TP9_USE_B12X_DCP_A2A: "1"
+      K3_TP9_VISION: "1"
+      KIMI_PCIE_ALLREDUCE_BACKEND: "flashinfer-ipc"
+      LMCACHE_ASYNC_MULTIGROUP_STORE: "1"
+      LMCACHE_CACHE_NAMESPACE: "${LMCACHE_CACHE_NAMESPACE:-qsrt-k2-tp9-kda-a3693719-lm98c8be0a}"
+      LMCACHE_CHUNK_SIZE: "4608"
+      LMCACHE_EMERGENCY_FLUSH_MIN_MBPS: "300"
+      LMCACHE_EMERGENCY_FLUSH_TIMEOUT: "10"
+      LMCACHE_EXPECTED_SOURCE_ROOT: "/opt/infernal-invocation/lmcache"
+      LMCACHE_HEARTBEAT_INTERVAL: "5"
+      LMCACHE_HTTP_PORT: "${LMCACHE_HTTP_PORT:-8088}"
+      LMCACHE_KV_LOAD_FAILURE_POLICY: "recompute"
+      LMCACHE_L1_EVICTION_RATIO: "0.15"
+      LMCACHE_L1_EVICTION_WATERMARK: "0.80"
+      LMCACHE_L1_GB: "${LMCACHE_L1_GB:-48}"
+      LMCACHE_L1_INIT_GB: "${LMCACHE_L1_GB:-48}"
+      LMCACHE_L1_PERIODIC_FLUSH_INTERVAL: "1"
+      LMCACHE_L2_EVICTION_POLICY: "LRU"
+      LMCACHE_L2_EVICTION_RATIO: "0.05"
+      LMCACHE_L2_EVICTION_WATERMARK: "0.90"
+      LMCACHE_L2_GB: "${LMCACHE_L2_GB:-2457.6}"
+      LMCACHE_L2_PATH: "/lmcache/l2"
+      LMCACHE_L2_PREFETCH_MAX_IN_FLIGHT: "8"
+      LMCACHE_L2_WORKERS: "4"
+      LMCACHE_LOG: "/tmp/lmcache-mp-8090.log"
+      LMCACHE_MAX_CPU_WORKERS: "16"
+      LMCACHE_MAX_GPU_WORKERS: "9"
+      LMCACHE_MODE: "disk"
+      LMCACHE_PORT: "${LMCACHE_PORT:-5555}"
+      LMCACHE_REQUIRE_CACHE_NAMESPACE: "1"
+      LMCACHE_RESTORE_PIN_LIMIT_CHUNKS: "4"
+      LMCACHE_RESTORE_WINDOW_CHUNKS: "4"
+      LMCACHE_SEPARATE_OBJECT_GROUPS: "1"
+      LMCACHE_SERVER_ENV: "CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY PYTHONPATH=/opt/infernal-invocation/b12x:/opt/infernal-invocation/vllm:/opt/infernal-invocation/lmcache"
+      LMCACHE_SHM_NAME: "${LMCACHE_SHM_NAME:-kimik3_qsrt_public_20260918}"
+      LMCACHE_SHM_RESERVE_GB: "4"
+      LMCACHE_START_TIMEOUT: "120"
+      LMCACHE_TRANSFER_MODE: "engine_driven"
+      LMCACHE_WORKER_REAP_TIMEOUT: "120"
+      LMCACHE_WORKER_REGISTRATION_GRACE: "86400"
+      MAMBA_BLOCK_SIZE: "4608"
+      MAX_MODEL_LEN: "1048576"
+      MAX_NUM_BATCHED_TOKENS: "4624"
+      MAX_NUM_SCHEDULED_TOKENS: "4624"
+      MAX_NUM_SEQS: "4"
+      MODEL: "/model"
+      NCCL_CUMEM_ENABLE: "0"
+      NCCL_IB_DISABLE: "1"
+      NCCL_LOCAL_INFERENCE_PATH: "/opt/local-inference/nccl/lib/libnccl.so.2.31.2"
+      NCCL_NET_PLUGIN: "none"
+      NCCL_P2P_DISABLE: "0"
+      NCCL_P2P_LEVEL: "SYS"
+      NCCL_PR2127_PATH: "/opt/local-inference/nccl/lib/libnccl.so.2.31.2"
+      NCCL_PROTO: "LL,LL128,Simple"
+      NCCL_TUNER_PLUGIN: "none"
+      NCCL_VERSION: "2.31.2"
+      PORT: "${PORT:-8090}"
+      PREFIX_MATCH_UNIT: "1536"
+      TP_SIZE: "9"
+      VLLM_CACHE_DIR: "/cache/tp9-colocated-prod/6e5fff3911585dfd/vllm"
+      VLLM_CACHE_ROOT: "/cache/tp9-colocated-prod/6e5fff3911585dfd/vllm"
+      VLLM_COMPUTE_NANS_IN_LOGITS: "1"
+      VLLM_CPP_AR_1STAGE_NCCL_CUTOFF: "56KB"
+      VLLM_CPP_AR_IGNORE_CUTOFF_MAX_ROWS: "0"
+      VLLM_DCP_KV_GATHER_SLOTS: "3"
+      VLLM_DCP_Q_REPLICATE: "0"
+      VLLM_DCP_SHARD_DRAFT: "0"
+      VLLM_DFLASH2_FULL_BLOCK: "1"
+      VLLM_DFLASH2_SELECTOR: "1"
+      VLLM_DISABLED_KERNELS: "MarlinFP8ScaledMMLinearKernel"
+      VLLM_DSPARK_COMPACT_ROPE: "1"
+      VLLM_DSPARK_DRAFT_KV_WINDOW: "4608"
+      VLLM_ENABLE_PCIE_ALLREDUCE: "1"
+      VLLM_EXL3_ENCODER_REVISION: "704aefd743b390af4bd0fb429d1906f9b964c7d8"
+      VLLM_EXL3_ENCODER_SOURCE: "/opt/exllamav3-python/exllamav3"
+      VLLM_EXL3_EXT_PATH: "/opt/exllamav3"
+      VLLM_EXL3_ONLINE_CACHE_DIR: "/cache/exl3-online"
+      VLLM_EXL3_ONLINE_CACHE_MODE: "readwrite"
+      VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR: "/cache/jit/cu133-torch213-kimi-k3-clean-vllm036b9adf72-b12xf0066813bd-lmcachee045d729bc/flashinfer-autotune"
+      VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE: "0"
+      VLLM_K3_DCP_GATHER_CLUSTERS: "${K3_PCIE_GROUPS:-0,1,2,3,8;4,5,6,7}"
+      VLLM_K3_DCP_GATHER_DMA: "1"
+      VLLM_K3_DCP_GATHER_DMA_MIN_ROWS: "2048"
+      VLLM_K3_DCP_GATHER_DMA_MIN_ROWS_FILE: ""
+      VLLM_K3_DCP_GATHER_MAX_BLOCKS: "16"
+      VLLM_K3_DCP_GATHER_MAX_BLOCKS_FILE: ""
+      VLLM_K3_DCP_GATHER_PACKED: "1"
+      VLLM_K3_DCP_GATHER_PIPELINE: "1"
+      VLLM_K3_DCP_GATHER_ROTATE_LIB: "/opt/k3ext/_C_k3ext.abi3.so"
+      VLLM_K3_DECODE_SHARD_PACK: "1"
+      VLLM_K3_DENSE_MLA_PARTIAL_DTYPE: "fp32"
+      VLLM_K3_DENSE_MLA_SINGLE_SPLIT_CHUNKS: "-1"
+      VLLM_K3_DRAFT_ASYNC_PREFILL_INGEST: "2"
+      VLLM_K3_DRAFT_DEFERRED_RESOLVE: "0"
+      VLLM_K3_DRAFT_LOGITS_TOPK: "0"
+      VLLM_K3_DRAFT_P2P: "0"
+      VLLM_K3_DRAFT_REMOTE_ADDRESS: ""
+      VLLM_K3_DRAFT_REMOTE_TIMEOUT_MS: "30000"
+      VLLM_K3_DRAFT_REUSE_RESTORED_KV: "1"
+      VLLM_K3_DRAFT_REUSE_RESTORED_KV_DISABLE_FILE: "/cache/tp9-colocated-prod/draft-reuse-disable"
+      VLLM_K3_DRAFT_TIMING_LOG_INTERVAL: "500"
+      VLLM_K3_DYNAMIC_SPARSE_STRIDE: "1"
+      VLLM_K3_INVARIANT_GEMM_MIN_ROWS: "1024"
+      VLLM_K3_INVARIANT_SMALL_N_GEMM: "1"
+      VLLM_K3_KDA_SPEC_FUSED_LIB: "/opt/k3kda/_C_k3kda.abi3.so"
+      VLLM_K3_L2_PREFETCH: "1"
+      VLLM_K3_L2_PREFETCH_PERSIST_MB: "32"
+      VLLM_K3_LATENT_REDUCE: "rs_fp32"
+      VLLM_K3_MOE_SPLIT_LAUNCH: "0"
+      VLLM_K3_PACKED_MLA_PARTIAL_DTYPE: "bf16"
+      VLLM_K3_PACKED_MLA_QUERY: "bf16"
+      VLLM_K3_PACKED_MLA_SPLIT_POLICY: "static"
+      VLLM_K3_PROJECTION_GATHER: "dma_pair"
+      VLLM_K3_REQUEST_ENDPOINT_CACHE: "1"
+      VLLM_K3_REQUEST_ENDPOINT_CACHE_DEBUG: "1"
+      VLLM_K3_REQUEST_ENDPOINT_CACHE_DEBUG_DISABLE_FILE: "/cache/precision-preserving/endpoint-debug-disable"
+      VLLM_K3_REQUEST_ENDPOINT_CACHE_DISABLE_FILE: "/cache/tp9-colocated-prod/endpoint-cache-disable"
+      VLLM_K3_REQUEST_ENDPOINT_CACHE_MAX_ENTRIES: "4"
+      VLLM_K3_REQUEST_ENDPOINT_CACHE_TORCH_COPY_FILE: "/cache/tp9-colocated-prod/endpoint-cache-torch-copy"
+      VLLM_K3_RESIDUAL_DIGEST_DIR: ""
+      VLLM_K3_RING_STATIC_IO: "1"
+      VLLM_K3_UBATCH_MODE_FILE: "/cache/ubatch-mode"
+      VLLM_K3_UBATCH_OFFSET: "1"
+      VLLM_K3_UBATCH_PREFILL: "1"
+      VLLM_K3_UBATCH_PREFILL_EXACT: "1"
+      VLLM_K3_UBATCH_PREFILL_MIN_TOKENS: "1024"
+      VLLM_K3_UBATCH_PREFILL_OVERLAP: "1"
+      VLLM_K3_UBATCH_TRACE: "0"
+      VLLM_K3_UBATCH_WATCHDOG_S: "120"
+      VLLM_K3_UBATCH_YIELD_ALL: "1"
+      VLLM_KIMI_K3_AUX_ATTN_RES_STREAM: "0"
+      VLLM_KQUANT_W4A16_PREFILL_BLOCK_M: "48"
+      VLLM_KQUANT_W4A16_PREFILL_MIN_M: "256"
+      VLLM_MLA_CHUNKED_PREFILL_WORKSPACE_SIZE: "1536"
+      VLLM_MLA_INTERNAL_CONTEXT_WORKSPACE_SIZE: "27648"
+      VLLM_MLA_SM120_FA4_PREFILL: "1"
+      VLLM_MXFP8_HYBRID_RECONSTRUCT: "triton"
+      VLLM_MXFP8_LINEAR_KERNEL: "MarlinMxfp8HybridLinearKernel"
+      VLLM_MXFP8_MARLIN_LARGE_M_THRESHOLD: "128"
+      VLLM_NCCL_SO_PATH: "/opt/local-inference/nccl/lib/libnccl.so.2.31.2"
+      VLLM_PCIE_ALLREDUCE_BACKEND: "b12x"
+      VLLM_PCIE_DMA_MIN_BYTES: "6MB"
+      VLLM_PCIE_ONESHOT_ALLREDUCE_MAX_SIZE: "112KB"
+      VLLM_PCIE_ONESHOT_FUSED_ADD_RMS_NORM_MAX_SIZE: "112KB"
+      VLLM_PCIE_TWOSHOT_ALLREDUCE_MAX_SIZE: "768KB"
+      VLLM_PCIE_TWOSHOT_ROW_ELEMS: "8"
+      VLLM_PROFILER_DIR: "/cache/profiler"
+      VLLM_PROFILER_EXTRA_ARGS: "--profiler-config.torch_profiler_with_stack=false --profiler-config.torch_profiler_record_shapes=false --profiler-config.torch_profiler_with_memory=false --profiler-config.torch_profiler_with_flops=false --profiler-config.torch_profiler_use_gzip=true --profiler-config.torch_profiler_dump_cuda_time_total=false --profiler-config.ignore_frontend=true --profiler-config.delay_iterations=0 --profiler-config.max_iterations=4 --profiler-config.warmup_iterations=0 --profiler-config.active_iterations=5 --profiler-config.wait_iterations=0"
+      VLLM_SERVER_DEV_MODE: "1"
+      VLLM_SHM_BROADCAST_BUSY_LOOP_S: "0.002"
+      VLLM_SOURCE_DIR: "/opt/venv/lib/python3.12/site-packages"
+      VLLM_SOURCE_OVERLAY_ACTIVE: "0"
+      VLLM_USE_V2_MODEL_RUNNER: "1"
+      VLLM_VIT_QUERY_SHARD: "1"
+      K3_TP9_CPU_PIN: "${K3_CPU_PIN:-0}"
+    volumes:
+      - type: bind
+        source: ${MODEL_DIR:?set MODEL_DIR in .env}
+        target: /model
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DRAFT_MODEL_DIR:?set DRAFT_MODEL_DIR in .env}
+        target: /draft-model
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CACHE_DIR:?set CACHE_DIR in .env}
+        target: /cache
+        read_only: false
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${LMCACHE_L2_DIR:?set LMCACHE_L2_DIR in .env}
+        target: /lmcache/l2
+        read_only: false
+        bind:
+          create_host_path: false
+  shm-preflight:
+    image: ${KIMI_IMAGE:-ghcr.io/myshytf/kimi-k3:runtime-20260918}
+    pull_policy: never
+    platform: linux/amd64
+    command: []
+    entrypoint:
+      - /opt/venv/bin/python
+      - /runtime/lmcache_shm_preflight.py
+      - --exact-name
+      - ${LMCACHE_SHM_NAME:-kimik3_qsrt_public_20260918}
+      - --required-gib
+      - "${LMCACHE_L1_GB:-48}"
+      - --reserve-gib
+      - "4"
+    ipc: host
+    pid: host
+    network_mode: none
+    privileged: true
+    security_opt: ["label=disable"]
+    restart: "no"

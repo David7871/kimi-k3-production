@@ -1,0 +1,1368 @@
+{
+  "status": "implemented",
+  "description": "PRs authored by myshytf, captured from the personal forks and local-inference-lab. Ancestry is against source-lock.json. Not-ancestor does not prove absence: cherry-picks and source copies are described in GIT-AND-PRS.md. Historical PR titles/states are preserved as evidence.",
+  "repositories": {
+    "myshytf/vllm": [
+      {
+        "baseRefName": "production/kimi-k3-20260917",
+        "headRefOid": "a3693719528811ac605dfa236321a53e5770b120",
+        "mergedAt": null,
+        "number": 17,
+        "state": "OPEN",
+        "title": "kimi-k3: fused KDA speculative-decode step (conv + recurrence + output norm)",
+        "url": "https://github.com/myshytf/vllm/pull/17",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-production-20260914",
+        "headRefOid": "67c5aa5e3e1f5496f9ea2032135a0fbcf1d5cc2a",
+        "mergedAt": null,
+        "number": 16,
+        "state": "OPEN",
+        "title": "bench(kimi): qualify precision-preserving decode cache residency",
+        "url": "https://github.com/myshytf/vllm/pull/16",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-split-prefill-exact-20260912",
+        "headRefOid": "2bd40e45138f638bbb408e374a6361420d45c763",
+        "mergedAt": null,
+        "number": 15,
+        "state": "OPEN",
+        "title": "perf(kimi): preserve exact expert-range overlap and qualify production serving",
+        "url": "https://github.com/myshytf/vllm/pull/15",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-request-endpoint-cache-20260911",
+        "headRefOid": "b1d47908693ca3c45a614178eddc89d69e31e533",
+        "mergedAt": null,
+        "number": 14,
+        "state": "OPEN",
+        "title": "scheduler: never advance a request past a load failure; bound the connector lookup wait",
+        "url": "https://github.com/myshytf/vllm/pull/14",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-mxfp8-kernel-override-20260912",
+        "headRefOid": "33e2741c7669260939d2de8d86ebc17de59d389e",
+        "mergedAt": null,
+        "number": 13,
+        "state": "OPEN",
+        "title": "kimi-k3: exact split prefill with hand-offs at every ring collective (prefill +7-13 %)",
+        "url": "https://github.com/myshytf/vllm/pull/13",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-request-endpoint-cache-20260911",
+        "headRefOid": "1a99b2371e9d50fead26e990dc075038e62b3d1e",
+        "mergedAt": null,
+        "number": 12,
+        "state": "OPEN",
+        "title": "perf(kimi): W8A16 for MXFP8 dense linears (kernel pin + hybrid large-M BF16 GEMM); non-fatal KLD capture hook",
+        "url": "https://github.com/myshytf/vllm/pull/12",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-draft-reuse-restored-kv-20260911",
+        "headRefOid": "935ba01342c7947f6e0e44acf5514807894adcb1",
+        "mergedAt": null,
+        "number": 11,
+        "state": "OPEN",
+        "title": "[WIP, not qualified] perf(kimi): request-endpoint prefix-cache entries resume the next turn at the last computed token",
+        "url": "https://github.com/myshytf/vllm/pull/11",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-packed-kv-transport-20260910",
+        "headRefOid": "8971e6e1b23e8079c50f202e7c771b319b9095c0",
+        "mergedAt": null,
+        "number": 10,
+        "state": "OPEN",
+        "title": "perf(kimi): DFlash draft reuses restored draft KV; recurrent checkpoint at the last hash boundary",
+        "url": "https://github.com/myshytf/vllm/pull/10",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-prefill-memory-20260910",
+        "headRefOid": "9b0f61960f72cadb45f71e5a21c563fb7d5ee072",
+        "mergedAt": null,
+        "number": 9,
+        "state": "OPEN",
+        "title": "Transport Kimi KV records without BF16 wire expansion",
+        "url": "https://github.com/myshytf/vllm/pull/9",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/k3-ttft-cache-audit-20260910",
+        "headRefOid": "b6d4495a9a406bb0ac11e5d7ba726aa7a1003f7a",
+        "mergedAt": null,
+        "number": 8,
+        "state": "OPEN",
+        "title": "Kimi QSRT: declare shared input scales for compact scratch",
+        "url": "https://github.com/myshytf/vllm/pull/8",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-host-memory-20260908",
+        "headRefOid": "277fec10c9e87aacbd0ee303b622852349f5ad11",
+        "mergedAt": null,
+        "number": 7,
+        "state": "OPEN",
+        "title": "Kimi-K3: DFlash \uc720\uc9c0\ud558\uba70 recurrent \uaf2c\ub9ac \uce90\uc2dc \uc7ac\uc0ac\uc6a9",
+        "url": "https://github.com/myshytf/vllm/pull/7",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "integration/k3-packed-mla-reader-20260908",
+        "headRefOid": "fa6ea71c01fdaef3a664d083a536cee00a848b1d",
+        "mergedAt": null,
+        "number": 6,
+        "state": "CLOSED",
+        "title": "Pad packed Kimi MLA query heads to eliminate tail launches",
+        "url": "https://github.com/myshytf/vllm/pull/6",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "kimi-k3-runtime-snapshot-20260905",
+        "headRefOid": "984c9c45caccd299a8670492280167cc66adc0d3",
+        "mergedAt": null,
+        "number": 5,
+        "state": "CLOSED",
+        "title": "Support Kimi-K3 TP9/DCP9 with colocated DFlash",
+        "url": "https://github.com/myshytf/vllm/pull/5",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "agent/k3-longctx-exact-20260901",
+        "headRefOid": "20c8c0d78547d0e3cd4165ac66b26a2db8110e52",
+        "mergedAt": null,
+        "number": 4,
+        "state": "OPEN",
+        "title": "perf(kimi-k3): deferred draft ingest and DMA-ring all-reduces for chunked prefill",
+        "url": "https://github.com/myshytf/vllm/pull/4",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "feat/kimi-k3-w4a8-prefill-20260830",
+        "headRefOid": "c7fd9c8d200bb5503e6bff0f9d9a76ac128bcf2d",
+        "mergedAt": null,
+        "number": 3,
+        "state": "OPEN",
+        "title": "perf(mla): stabilize Kimi-K3 long-context verification",
+        "url": "https://github.com/myshytf/vllm/pull/3",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "feat/kimi-k3-w4a8-prefill-20260830",
+        "headRefOid": "d7159ce339bf265eb26be8fc91e661da9bac69ab",
+        "mergedAt": null,
+        "number": 2,
+        "state": "OPEN",
+        "title": "perf(kquant): hand off materialized W4A8 input as MXFP8",
+        "url": "https://github.com/myshytf/vllm/pull/2",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "production/kimi-k3-w4a8-prefill-base-20260830",
+        "headRefOid": "118a8523b0945cb626439058583ec691ef6500a0",
+        "mergedAt": null,
+        "number": 1,
+        "state": "OPEN",
+        "title": "feat(kquant): opt into W4A8 for coupled QSRT prefill",
+        "url": "https://github.com/myshytf/vllm/pull/1",
+        "relation_to_runtime": "not_ancestor"
+      }
+    ],
+    "myshytf/b12x": [
+      {
+        "baseRefName": "perf/kimi-inline-groups-20260915",
+        "headRefOid": "0fa8f11314141fbf26cc94181e8a5382b94cfc52",
+        "mergedAt": null,
+        "number": 12,
+        "state": "OPEN",
+        "title": "perf(moe): carry FC2 task-column cursor with exact model outputs",
+        "url": "https://github.com/myshytf/b12x/pull/12",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-static-peer-decode-20260914",
+        "headRefOid": "7b017282561acad6e6e8fb8a7b9af343a15e5075",
+        "mergedAt": null,
+        "number": 11,
+        "state": "OPEN",
+        "title": "perf(moe): inline exact FC2 reference-group preparation",
+        "url": "https://github.com/myshytf/b12x/pull/11",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "fix/kimi-retained-fc2-20260914",
+        "headRefOid": "b6c8bde0108f24e998042190b5b00f45d499b6a9",
+        "mergedAt": null,
+        "number": 10,
+        "state": "OPEN",
+        "title": "perf(kimi): resolve TP9 decode peer addresses at compile time",
+        "url": "https://github.com/myshytf/b12x/pull/10",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/k3-split-overlap-moe-launch-20260912",
+        "headRefOid": "85223507ea5973d82ccc2182c7901aa0d0272105",
+        "mergedAt": null,
+        "number": 9,
+        "state": "OPEN",
+        "title": "fix(kimi): retain expert-range outputs and stabilize short-prefill routing",
+        "url": "https://github.com/myshytf/b12x/pull/9",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "integration/k3-packed-mla-reader-20260908",
+        "headRefOid": "c0c304ead76b17169e25fe3e992079248206e4db",
+        "mergedAt": null,
+        "number": 8,
+        "state": "OPEN",
+        "title": "w4a16 fused MoE launch geometry and split-launch options for the exact split prefill",
+        "url": "https://github.com/myshytf/b12x/pull/8",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/kimi-qsrt-prefill-reuse-20260910",
+        "headRefOid": "1c381b5df93cc1815982f6e9d7a8bfaf5b5a3298",
+        "mergedAt": null,
+        "number": 7,
+        "state": "OPEN",
+        "title": "Route DCP query gathers through PCIe switch groups",
+        "url": "https://github.com/myshytf/b12x/pull/7",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "production/kimi-b12x-20260910",
+        "headRefOid": "297987f2daf1e7b2f9b7fd32a945d74a17e28210",
+        "mergedAt": null,
+        "number": 6,
+        "state": "OPEN",
+        "title": "Preserve QSRT precision while reusing rotation scratch",
+        "url": "https://github.com/myshytf/b12x/pull/6",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "integration/k3-packed-mla-reader-20260908",
+        "headRefOid": "36873045ae52f1acde5980d88fd380af8d4ad4d7",
+        "mergedAt": null,
+        "number": 5,
+        "state": "CLOSED",
+        "title": "Use planned QSRT benchmark output and preserve timing evidence",
+        "url": "https://github.com/myshytf/b12x/pull/5",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "kimi-k3-runtime-snapshot-20260905",
+        "headRefOid": "e6e280c1bb5d71198454facd1434a05267bc058c",
+        "mergedAt": null,
+        "number": 4,
+        "state": "CLOSED",
+        "title": "Support TP9 PCIe collectives and compact QSRT extents",
+        "url": "https://github.com/myshytf/b12x/pull/4",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "agent/kimi-k3-mxfp8-entry-handoff-20260830-pr",
+        "headRefOid": "5cabce43e4e236c5d87fcf5cf1b15624edd28df4",
+        "mergedAt": null,
+        "number": 3,
+        "state": "OPEN",
+        "title": "perf(moe): memoize execution planning and launch the dynamic kernel directly",
+        "url": "https://github.com/myshytf/b12x/pull/3",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "feat/kimi-k3-w4a8-prefill-20260830",
+        "headRefOid": "41872069b225197144ef985f24067948b5fffe60",
+        "mergedAt": null,
+        "number": 2,
+        "state": "OPEN",
+        "title": "perf(moe): consume prequantized MXFP8 expert input",
+        "url": "https://github.com/myshytf/b12x/pull/2",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "production/kimi-k3-w4a8-prefill-base-20260830",
+        "headRefOid": "6e7a0694664cddf0a046dacefd1903d1fa1ace9b",
+        "mergedAt": null,
+        "number": 1,
+        "state": "OPEN",
+        "title": "feat(moe): serve coupled QSRT prefill with W4A8",
+        "url": "https://github.com/myshytf/b12x/pull/1",
+        "relation_to_runtime": "not_ancestor"
+      }
+    ],
+    "myshytf/LMCache": [
+      {
+        "baseRefName": "production/kimi-k3-20260917",
+        "headRefOid": "98c8be0a655bdf5411a8a2335f21cb44a76083d7",
+        "mergedAt": "2026-09-17T13:20:08Z",
+        "number": 7,
+        "state": "MERGED",
+        "title": "fix(prefetch): serve L1-resident plan keys in place; keep the lookup kind fixed",
+        "url": "https://github.com/myshytf/LMCache/pull/7",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "perf/windowed-l2-restore-20260912",
+        "headRefOid": "74e73446527d4b9531fccb617dad82330f8daac7",
+        "mergedAt": null,
+        "number": 6,
+        "state": "OPEN",
+        "title": "mp: release a worker's restore-window read locks exactly as requested",
+        "url": "https://github.com/myshytf/LMCache/pull/6",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "fix/dflash2-padded-kv-stride-20260908",
+        "headRefOid": "212d96c1d443561895eff2dc2560a632be0f1d53",
+        "mergedAt": null,
+        "number": 5,
+        "state": "OPEN",
+        "title": "perf(mp): lookup-only presence reports for local-hit requests on hybrid engines",
+        "url": "https://github.com/myshytf/LMCache/pull/5",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "dev",
+        "headRefOid": "efdd432fbc37a4f7bc2f8649a008b393428cf36b",
+        "mergedAt": null,
+        "number": 4,
+        "state": "CLOSED",
+        "title": "Preserve recurrent pages independently of logical token cadence",
+        "url": "https://github.com/myshytf/LMCache/pull/4",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "production/kimi-k3-lmcache-base-20260901",
+        "headRefOid": "ab259a3149d38da3ab6d1bc8c28b0cfd671026d5",
+        "mergedAt": null,
+        "number": 3,
+        "state": "OPEN",
+        "title": "[Perf][MP] Run multi-group engine-driven stores in the background",
+        "url": "https://github.com/myshytf/LMCache/pull/3",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "fix/mamba-dcp-replicated-span-upstream",
+        "headRefOid": "d30c7282db264b5cee97025570e9b50dd6e249ac",
+        "mergedAt": null,
+        "number": 2,
+        "state": "OPEN",
+        "title": "[Feature][vLLM] Wire fine-grained external cache objects",
+        "url": "https://github.com/myshytf/LMCache/pull/2",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "fix/external-recurrent-tail-restore",
+        "headRefOid": "c7b1529327b95c7034c80cab5edd94a05f0d156c",
+        "mergedAt": null,
+        "number": 1,
+        "state": "OPEN",
+        "title": "[Feature][MP] Support fine-grained external cache objects",
+        "url": "https://github.com/myshytf/LMCache/pull/1",
+        "relation_to_runtime": "not_ancestor"
+      }
+    ],
+    "local-inference-lab/vllm": [
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "4a26f1093d4e893dee9a2d4d3c75220983ce7f94",
+        "mergedAt": null,
+        "number": 732,
+        "state": "OPEN",
+        "title": "perf(kimi): resume the next turn at a finished request's last computed token",
+        "url": "https://github.com/local-inference-lab/vllm/pull/732",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "f50e47b1c80582b80edf0f59742936ee7f4f28eb",
+        "mergedAt": null,
+        "number": 722,
+        "state": "OPEN",
+        "title": "kimi-k3: DSpark draft per-tap fc_norm and confidence head (lightseek checkpoint)",
+        "url": "https://github.com/local-inference-lab/vllm/pull/722",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "8e9593bb2ea70dd72d995cb6971f3fc0a5d783d0",
+        "mergedAt": null,
+        "number": 719,
+        "state": "OPEN",
+        "title": "kimi-k3: exact split prefill on the served lineage (#678 rebase) with fixed-order small-N GEMMs",
+        "url": "https://github.com/local-inference-lab/vllm/pull/719",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "4cadcda82abc5fba5d1308c04c897feaa7af2c92",
+        "mergedAt": null,
+        "number": 717,
+        "state": "OPEN",
+        "title": "Kimi-K3 KDA: keep the checkpoint slot index 64-bit inside the store kernel",
+        "url": "https://github.com/local-inference-lab/vllm/pull/717",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "95f84947b38eaadd4a3a438c2521389bb3d8c8dc",
+        "mergedAt": null,
+        "number": 711,
+        "state": "OPEN",
+        "title": "Reuse UVA contents for host token-table updates",
+        "url": "https://github.com/local-inference-lab/vllm/pull/711",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "c300c523a6495a440e1ada9612cd2d507d56e736",
+        "mergedAt": null,
+        "number": 704,
+        "state": "OPEN",
+        "title": "Kimi-K3: serve the DFlash2 draft on the colocated MLA draft backbone",
+        "url": "https://github.com/local-inference-lab/vllm/pull/704",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "c7c17309b4a68d74b7036fe8fafc38f4fd934cfc",
+        "mergedAt": null,
+        "number": 702,
+        "state": "OPEN",
+        "title": "Kimi-K3 decode: logical-width paired gather rows, tail profiler hook, Triton MXFP8 quantizer replica (decode campaign G1/G3/G4)",
+        "url": "https://github.com/local-inference-lab/vllm/pull/702",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "f888bfeefeb9dc49198d3c5846160c6d5cfe747f",
+        "mergedAt": null,
+        "number": 696,
+        "state": "OPEN",
+        "title": "\uc5f0\uad6c\uc6a9 Kimi worker allocator-history \ubc0f snapshot \uc9c4\ub2e8 \ubcf4\uc874",
+        "url": "https://github.com/local-inference-lab/vllm/pull/696",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "95b96696e702a307f934319cc7ae74fe4efead24",
+        "mergedAt": null,
+        "number": 693,
+        "state": "OPEN",
+        "title": "Frontend: preserve server-default repetition detection backport",
+        "url": "https://github.com/local-inference-lab/vllm/pull/693",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "ffe189252b7e52721277aa2f2c713926c0a1e9a4",
+        "mergedAt": null,
+        "number": 692,
+        "state": "OPEN",
+        "title": "Kimi KDA: preserve stateless first-token prefill classification backport",
+        "url": "https://github.com/local-inference-lab/vllm/pull/692",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "5478d7de918dbe831a5f2e228f21eedf0b898df0",
+        "mergedAt": null,
+        "number": 691,
+        "state": "OPEN",
+        "title": "Research: prefill projection head-gather transport, negative result",
+        "url": "https://github.com/local-inference-lab/vllm/pull/691",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "d619dd51e57306c0d2bbc78e406aa802610770c2",
+        "mergedAt": null,
+        "number": 690,
+        "state": "OPEN",
+        "title": "Research: recent-token decode window for packed Kimi MLA, disabled by default",
+        "url": "https://github.com/local-inference-lab/vllm/pull/690",
+        "relation_to_runtime": "not_in_local_object_store"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "7ee6b95d2a28a056bea271c4059a7d7a20c985f0",
+        "mergedAt": null,
+        "number": 687,
+        "state": "OPEN",
+        "title": "Model runner v2: keep short prefills off speculative decode graphs",
+        "url": "https://github.com/local-inference-lab/vllm/pull/687",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "86e06c56374d2bf3aabf0fac84fc747500fe7bc1",
+        "mergedAt": null,
+        "number": 686,
+        "state": "OPEN",
+        "title": "Kimi-K3 decode: pack only the local padded up-projection input",
+        "url": "https://github.com/local-inference-lab/vllm/pull/686",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "f7a9b6c6852e886cb82820845563b56e53cbcbcd",
+        "mergedAt": null,
+        "number": 678,
+        "state": "OPEN",
+        "title": "Kimi-K3 split prefill: complete the model side and add a per-block residual digest (research-only)",
+        "url": "https://github.com/local-inference-lab/vllm/pull/678",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "42d24bd7804e0d3d2c65a186c7d098d779cd195d",
+        "mergedAt": null,
+        "number": 677,
+        "state": "OPEN",
+        "title": "Kimi-K3 prefill: prewarmed MoE launch bindings, ring static I/O, paired gather, latent reduce-scatter, routing dump",
+        "url": "https://github.com/local-inference-lab/vllm/pull/677",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "28fd37296ee0ab3211ab04958aea1a3b16bdfd80",
+        "mergedAt": null,
+        "number": 654,
+        "state": "OPEN",
+        "title": "feat(kimi-k3): TP9/DCP9 with colocated DFlash and padded query output",
+        "url": "https://github.com/local-inference-lab/vllm/pull/654",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "be118b7c4cd1969e59881dc06c5c07a864a73bf0",
+        "mergedAt": null,
+        "number": 650,
+        "state": "OPEN",
+        "title": "Skip over-provisioned varlen tiles in the SM80/SM120 FA4 forward kernel",
+        "url": "https://github.com/local-inference-lab/vllm/pull/650",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "2c99648d718555502a25437ed3035c59dbd933b0",
+        "mergedAt": null,
+        "number": 644,
+        "state": "OPEN",
+        "title": "feat(mla): packed fp8_ds_mla Kimi-K3 dense cache with exact partial-DCP-page resumes",
+        "url": "https://github.com/local-inference-lab/vllm/pull/644",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "b039db2971495b3ce24b2b2d08407d8b107e6df7",
+        "mergedAt": null,
+        "number": 615,
+        "state": "OPEN",
+        "title": "perf(kimi-k3): prelaunch shared experts before routed preparation",
+        "url": "https://github.com/local-inference-lab/vllm/pull/615",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "7c911c4396881f4de414d1c7cc707a84d5a73145",
+        "mergedAt": null,
+        "number": 610,
+        "state": "OPEN",
+        "title": "fix(worker): complete a deferred step output before an out-of-band RPC",
+        "url": "https://github.com/local-inference-lab/vllm/pull/610",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "ec40bfe85dec3d9fc8f9172a0963bfd9949f0550",
+        "mergedAt": null,
+        "number": 608,
+        "state": "OPEN",
+        "title": "perf(spec_decode): move the remote K3 draft payloads to peer GPU memory",
+        "url": "https://github.com/local-inference-lab/vllm/pull/608",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "82d2e436d4cfdaa3bf93d8bd9e2eab5233b93d0b",
+        "mergedAt": null,
+        "number": 604,
+        "state": "OPEN",
+        "title": "perf(spec_decode): consume the remote K3 draft reply in stream order",
+        "url": "https://github.com/local-inference-lab/vllm/pull/604",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "bb6f6b301a3882d2676994ab3a4d8b8153b5eafc",
+        "mergedAt": null,
+        "number": 595,
+        "state": "OPEN",
+        "title": "feat(mla): expose dense MLA split precision options for Kimi-K3",
+        "url": "https://github.com/local-inference-lab/vllm/pull/595",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "da309546078f3d166911c9a7e209b21c9444936a",
+        "mergedAt": null,
+        "number": 593,
+        "state": "OPEN",
+        "title": "perf(distributed): route mid-size TP all-reduces to the bf16 PCIe two-shot (Kimi-K3 wrapper)",
+        "url": "https://github.com/local-inference-lab/vllm/pull/593",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "a166a3b4bb6d3b0123d6fccc2e239f5411e18ecd",
+        "mergedAt": null,
+        "number": 592,
+        "state": "OPEN",
+        "title": "perf(kimi-k3): prefetch the next dense projections into L2 during decode (port of #586)",
+        "url": "https://github.com/local-inference-lab/vllm/pull/592",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "a800a207264d5b06790069b83e2ebe25e1106c12",
+        "mergedAt": null,
+        "number": 591,
+        "state": "OPEN",
+        "title": "perf(mamba): hoist the causal_conv1d_update token loads for decode (Kimi-K3 port of #579)",
+        "url": "https://github.com/local-inference-lab/vllm/pull/591",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "ef867a40c5ca40f692b90793b279cd7e10a10b7d",
+        "mergedAt": null,
+        "number": 588,
+        "state": "OPEN",
+        "title": "perf(mla): publish DCP context-KV windows one ahead on a side stream",
+        "url": "https://github.com/local-inference-lab/vllm/pull/588",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "31d53eeab9114099a8e7062822bf12ebcec2ca35",
+        "mergedAt": null,
+        "number": 587,
+        "state": "OPEN",
+        "title": "perf(mla): launch one dense MLA split per live chunk",
+        "url": "https://github.com/local-inference-lab/vllm/pull/587",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "b8aff7eb8785acf31b95d917f70cc117903bc9b1",
+        "mergedAt": null,
+        "number": 585,
+        "state": "OPEN",
+        "title": "perf(spec_decode): transport the remote DFlash draft distribution as a top-k slice",
+        "url": "https://github.com/local-inference-lab/vllm/pull/585",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "be6b54dd6e7fc6ccdfe2498e19b3dd9f868d5513",
+        "mergedAt": null,
+        "number": 584,
+        "state": "OPEN",
+        "title": "perf(dflash): capture the draft's per-step context ingest and use fused fp8 kernels",
+        "url": "https://github.com/local-inference-lab/vllm/pull/584",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "73879ed99b14b51861ae797c871eda2c4456399f",
+        "mergedAt": null,
+        "number": 577,
+        "state": "OPEN",
+        "title": "perf(dcp): rotate destinations in the PCIe peer KV gather",
+        "url": "https://github.com/local-inference-lab/vllm/pull/577",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "3b2c20e162ecbd91d454c617d2ec6df7d20d5cc6",
+        "mergedAt": null,
+        "number": 570,
+        "state": "OPEN",
+        "title": "perf(dflash): serve the K3 DFlash draft with fp8 weights and a fp8 head",
+        "url": "https://github.com/local-inference-lab/vllm/pull/570",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "9ce4f3aa4b0a6a5ef48d2ec714e372e36aefa510",
+        "mergedAt": null,
+        "number": 569,
+        "state": "OPEN",
+        "title": "fix(lmcache): align admitted external hits to the local hit grid",
+        "url": "https://github.com/local-inference-lab/vllm/pull/569",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "c7f62828848f81d7690023a8573d3a8d63fa320c",
+        "mergedAt": null,
+        "number": 568,
+        "state": "OPEN",
+        "title": "perf(mla): SM120 FA4 dense prefill, PCIe prefill-KV publish, and fused chunked-context packing for Kimi-K3",
+        "url": "https://github.com/local-inference-lab/vllm/pull/568",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "d7159ce339bf265eb26be8fc91e661da9bac69ab",
+        "mergedAt": null,
+        "number": 567,
+        "state": "OPEN",
+        "title": "perf(kquant): hand off materialized W4A8 input as MXFP8; keep Kimi multimodal linears in BF16",
+        "url": "https://github.com/local-inference-lab/vllm/pull/567",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "118a8523b0945cb626439058583ec691ef6500a0",
+        "mergedAt": null,
+        "number": 566,
+        "state": "OPEN",
+        "title": "feat(kquant): opt into W4A8 for coupled QSRT prefill",
+        "url": "https://github.com/local-inference-lab/vllm/pull/566",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "d461572be161b8dc1ac37964ccd6c1d5694cc105",
+        "mergedAt": null,
+        "number": 565,
+        "state": "OPEN",
+        "title": "perf(mla): fuse K3 DCP verification queries",
+        "url": "https://github.com/local-inference-lab/vllm/pull/565",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "3545324f2de5a59837244c972a716ba6075a5007",
+        "mergedAt": null,
+        "number": 564,
+        "state": "OPEN",
+        "title": "perf(kimi-k3): DMA-ring TP all-reduces and deferred draft ingest for chunked prefill",
+        "url": "https://github.com/local-inference-lab/vllm/pull/564",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "a5d2f8b41d6f22e08a189b7f418d2c23d6335f71",
+        "mergedAt": null,
+        "number": 563,
+        "state": "OPEN",
+        "title": "perf(kquant): plan W4A16 trellis prefill on wide route blocks",
+        "url": "https://github.com/local-inference-lab/vllm/pull/563",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "3be2772da7125643e56f01c848fa70b7ab2341f6",
+        "mergedAt": null,
+        "number": 474,
+        "state": "OPEN",
+        "title": "fix(kimi_k3): load dense EXL3 DSpark drafts",
+        "url": "https://github.com/local-inference-lab/vllm/pull/474",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "333e795f13ec2e431b86d058a571f5a592e517f8",
+        "mergedAt": null,
+        "number": 466,
+        "state": "OPEN",
+        "title": "fix(cache): avoid target EAGLE drop for disaggregated DSpark",
+        "url": "https://github.com/local-inference-lab/vllm/pull/466",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "7f37e34ca7c965b477fb91f7be9bc3668271fc87",
+        "mergedAt": null,
+        "number": 465,
+        "state": "OPEN",
+        "title": "feat(spec_decode): run the Kimi-K3 DSpark draft on a dedicated remote GPU",
+        "url": "https://github.com/local-inference-lab/vllm/pull/465",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "877e8987939d30a6f6e64e8804589baeb505c8c7",
+        "mergedAt": null,
+        "number": 420,
+        "state": "OPEN",
+        "title": "perf(fla): normalize tail alignment specialization",
+        "url": "https://github.com/local-inference-lab/vllm/pull/420",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "4e6c2102fe7dea8e97848f75b95a3b54f4848774",
+        "mergedAt": "2026-08-17T14:30:05Z",
+        "number": 401,
+        "state": "MERGED",
+        "title": "fix(prefix-cache): allow hash-aligned DCP hybrid hits",
+        "url": "https://github.com/local-inference-lab/vllm/pull/401",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "8aaf4fc1380d7145a0e4c7edc9dea1cf35ac0d9e",
+        "mergedAt": "2026-08-17T14:28:11Z",
+        "number": 395,
+        "state": "MERGED",
+        "title": "fix(renderer): merge split Kimi-K3 assistant prose+tool_calls turns",
+        "url": "https://github.com/local-inference-lab/vllm/pull/395",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "88b96ebfb3f60dd24879dea124c653ca8e66c50e",
+        "mergedAt": null,
+        "number": 330,
+        "state": "CLOSED",
+        "title": "[Bugfix] Preserve Mamba CoW after external prefix hits",
+        "url": "https://github.com/local-inference-lab/vllm/pull/330",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev/infernal-invocation",
+        "headRefOid": "9d852296d6a12e1c580108868eef7bc07ec6476e",
+        "mergedAt": null,
+        "number": 321,
+        "state": "CLOSED",
+        "title": "[Bugfix] [Infernal] Stream Kimi K3 XTML tool-call arguments incrementally",
+        "url": "https://github.com/local-inference-lab/vllm/pull/321",
+        "relation_to_runtime": "not_ancestor"
+      }
+    ],
+    "local-inference-lab/b12x": [
+      {
+        "baseRefName": "master",
+        "headRefOid": "18a78c170abae4aa56b94c66e67b7570176fdcc3",
+        "mergedAt": null,
+        "number": 350,
+        "state": "OPEN",
+        "title": "PCIe DMA ring: row-granule chunk mapping and fp32 reduce-scatter hops on the served ring (port of #331)",
+        "url": "https://github.com/local-inference-lab/b12x/pull/350",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "4cde442a13b4d098fdd9f4749986e32884b3d552",
+        "mergedAt": null,
+        "number": 343,
+        "state": "OPEN",
+        "title": "PCIe collectives: trigger programmatic dependents at kernel entry (Kimi-K3 TP9 decode)",
+        "url": "https://github.com/local-inference-lab/b12x/pull/343",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "88ad4b73dd0084832578c693a3eabba731436d9f",
+        "mergedAt": null,
+        "number": 339,
+        "state": "OPEN",
+        "title": "Optimize Kimi decode collectives and audit QSRT verify kernels",
+        "url": "https://github.com/local-inference-lab/b12x/pull/339",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "6d9efdda8af215ac9fa5a14bb48aade1aa9ceaf7",
+        "mergedAt": null,
+        "number": 335,
+        "state": "OPEN",
+        "title": "PCIe DCP attention exchange: push staging transport for AllGatherHeads / LseReduceScatter (opt-in)",
+        "url": "https://github.com/local-inference-lab/b12x/pull/335",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "d3e3cf524808ebb087c90f330db6f48f4c670a0d",
+        "mergedAt": null,
+        "number": 334,
+        "state": "OPEN",
+        "title": "W4A16 fused MoE: pipeline-depth and small-M CTAs-per-SM launch knobs (opt-in)",
+        "url": "https://github.com/local-inference-lab/b12x/pull/334",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "0d0b9b3fec16c478dfe157b88db0e659eb2372a3",
+        "mergedAt": null,
+        "number": 331,
+        "state": "OPEN",
+        "title": "PCIe DMA ring: row-count-invariant granule mapping and fp32 reduce-scatter hops (opt-in)",
+        "url": "https://github.com/local-inference-lab/b12x/pull/331",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "67424710ad672f3cabbdc4b44ea470171613cc4d",
+        "mergedAt": null,
+        "number": 329,
+        "state": "OPEN",
+        "title": "PCIe DMA ring: static-buffer replay, paired all-gather, column reduce-scatter with fp32 wire",
+        "url": "https://github.com/local-inference-lab/b12x/pull/329",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "8f01896164d71fb21a37b4e26264fbcf3a7cb9c4",
+        "mergedAt": null,
+        "number": 328,
+        "state": "OPEN",
+        "title": "W4A16 fused MoE: funnel-shift T12 decode chain, cross-tile prefetch, token-major rotation",
+        "url": "https://github.com/local-inference-lab/b12x/pull/328",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "95a15d07d6b0be5fdf1e9ce9a84cb5da3dfd39a7",
+        "mergedAt": null,
+        "number": 327,
+        "state": "OPEN",
+        "title": "Kimi-K3 prefill: route-block-64 planner fit, stable route pack, dense-GEMM ports",
+        "url": "https://github.com/local-inference-lab/b12x/pull/327",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "ac4587e5454333354c90b0e0eef292a743d30fcf",
+        "mergedAt": null,
+        "number": 319,
+        "state": "OPEN",
+        "title": "feat(comm): nine-rank PCIe collectives, push two-shot BF16 all-reduce and compact QSRT extents for Kimi-K3 TP9",
+        "url": "https://github.com/local-inference-lab/b12x/pull/319",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "e6e280c1bb5d71198454facd1434a05267bc058c",
+        "mergedAt": null,
+        "number": 318,
+        "state": "CLOSED",
+        "title": "feat(comm): nine-rank PCIe collectives, push two-shot BF16 all-reduce and compact QSRT extents for Kimi-K3 TP9",
+        "url": "https://github.com/local-inference-lab/b12x/pull/318",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "3477caf6b667ac0771c1896cb3a323f59aa28a3b",
+        "mergedAt": "2026-09-06T05:21:52Z",
+        "number": 312,
+        "state": "MERGED",
+        "title": "test(mla): guard softmax rescaling across chunks and high page offsets",
+        "url": "https://github.com/local-inference-lab/b12x/pull/312",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "fe5d680959fa53cafefdf60c30983c0b42097ca5",
+        "mergedAt": null,
+        "number": 311,
+        "state": "OPEN",
+        "title": "Add packed MLA fast paths and TP9 numerical evidence",
+        "url": "https://github.com/local-inference-lab/b12x/pull/311",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "f7c8fc7a5e9b918bdcb845c2121683957475a73e",
+        "mergedAt": null,
+        "number": 300,
+        "state": "OPEN",
+        "title": "perf(moe): bulk-copy the staged W4A16 direct table",
+        "url": "https://github.com/local-inference-lab/b12x/pull/300",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "3bd2e4f4297d55e967294fbdc126bcb1d4baa263",
+        "mergedAt": null,
+        "number": 292,
+        "state": "OPEN",
+        "title": "fix(dense_mla): keep one split for short requests, float32 split partials",
+        "url": "https://github.com/local-inference-lab/b12x/pull/292",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "68f5c38696680181d730c47e05e4ca69fbc6ba2e",
+        "mergedAt": null,
+        "number": 291,
+        "state": "OPEN",
+        "title": "perf(dense_mla): balance split ranges over the launched CTAs",
+        "url": "https://github.com/local-inference-lab/b12x/pull/291",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "cc09c60f55408b1035b3a1014f96b5b9daa68fc7",
+        "mergedAt": null,
+        "number": 288,
+        "state": "OPEN",
+        "title": "perf(gemm): quantize small-M MXFP8 linear activations inside the GEMM",
+        "url": "https://github.com/local-inference-lab/b12x/pull/288",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "379151ebac3838079d8ab64e220e3f81da8ff48b",
+        "mergedAt": null,
+        "number": 287,
+        "state": "OPEN",
+        "title": "perf(moe): direct SQG-XOR-Cheb-T12 rate table in shared memory for W4A16 trellis decode",
+        "url": "https://github.com/local-inference-lab/b12x/pull/287",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "b1a6a11172af4d80d50f3d56b9bfd9adad130a42",
+        "mergedAt": null,
+        "number": 282,
+        "state": "OPEN",
+        "title": "feat(moe): B12X_W4A16_RESERVE_SMS keeps SMs free of the persistent fused MoE grid",
+        "url": "https://github.com/local-inference-lab/b12x/pull/282",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "a56bb9ca40cfa971990a2762fd11f5ba14390fa1",
+        "mergedAt": null,
+        "number": 281,
+        "state": "OPEN",
+        "title": "perf(comm): CUDA-graph replay for eager PCIe DMA ring all-reduces",
+        "url": "https://github.com/local-inference-lab/b12x/pull/281",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "76518c55a1f80a59f12b359668dcb5b388129169",
+        "mergedAt": null,
+        "number": 277,
+        "state": "OPEN",
+        "title": "perf(gemm): exact split-K for narrow-N tiny-M FP8 projections",
+        "url": "https://github.com/local-inference-lab/b12x/pull/277",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "5cabce43e4e236c5d87fcf5cf1b15624edd28df4",
+        "mergedAt": null,
+        "number": 276,
+        "state": "OPEN",
+        "title": "perf(moe): memoize TP-MoE execution planning and call the dynamic launch directly in eager mode",
+        "url": "https://github.com/local-inference-lab/b12x/pull/276",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "41872069b225197144ef985f24067948b5fffe60",
+        "mergedAt": null,
+        "number": 275,
+        "state": "OPEN",
+        "title": "feat(moe): serve coupled QSRT prefill with W4A8-MX and consume prequantized MXFP8 expert input",
+        "url": "https://github.com/local-inference-lab/b12x/pull/275",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "b6e11f5d0bd4bd413e6f577896456ec5b0d572c4",
+        "mergedAt": null,
+        "number": 274,
+        "state": "OPEN",
+        "title": "perf(moe): gate the W4A16 stripe split-K to decode-sized launches",
+        "url": "https://github.com/local-inference-lab/b12x/pull/274",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "581c757868e199ff26a118dfbc99fcf5c8d80666",
+        "mergedAt": null,
+        "number": 271,
+        "state": "OPEN",
+        "title": "perf(attention): fuse K3 four-query MLA verification",
+        "url": "https://github.com/local-inference-lab/b12x/pull/271",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "agent/pr197-base-glm52-sqg",
+        "headRefOid": "7917d618a09cb01cde7df31ac6696dbe86dd72ab",
+        "mergedAt": "2026-08-22T06:45:07Z",
+        "number": 237,
+        "state": "MERGED",
+        "title": "fix(moe): sanitize inactive QSRT W4A16 routes",
+        "url": "https://github.com/local-inference-lab/b12x/pull/237",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "master",
+        "headRefOid": "8c6f5a38fbbfea918df977f1e1f549f21fc5294a",
+        "mergedAt": "2026-08-16T20:05:08Z",
+        "number": 226,
+        "state": "MERGED",
+        "title": "fix(moe): reuse fixed route arenas for prefill tails",
+        "url": "https://github.com/local-inference-lab/b12x/pull/226",
+        "relation_to_runtime": "not_ancestor"
+      }
+    ],
+    "local-inference-lab/LMCache": [
+      {
+        "baseRefName": "dev",
+        "headRefOid": "a07e0799e70df17fcc674b82166b22377520e4af",
+        "mergedAt": null,
+        "number": 69,
+        "state": "OPEN",
+        "title": "mp: windowed L2-to-GPU restore of external prefixes larger than the L1 pin limit",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/69",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "dev",
+        "headRefOid": "656c98ed245d90814c0f95ae3ea7c974568605a9",
+        "mergedAt": null,
+        "number": 68,
+        "state": "OPEN",
+        "title": "eviction: configurable emergency-flush budget sized from the deficit",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/68",
+        "relation_to_runtime": "ancestor"
+      },
+      {
+        "baseRefName": "dev",
+        "headRefOid": "9ff2e1c5a08e7e6155157778275a844518ba58a6",
+        "mergedAt": null,
+        "number": 63,
+        "state": "OPEN",
+        "title": "Cover padded MLA page transfers and suppress repeated layout audits",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/63",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev",
+        "headRefOid": "cbf156eafd776ebc0e2f17515d9f01540f8b7a25",
+        "mergedAt": null,
+        "number": 60,
+        "state": "OPEN",
+        "title": "Kimi recurrent snapshot \uc8fc\uae30\ub85c Mamba \ud504\ub9ac\ud544 \uc815\ub82c \uac80\uc99d",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/60",
+        "relation_to_runtime": "not_in_local_object_store"
+      },
+      {
+        "baseRefName": "dev",
+        "headRefOid": "a55eacbdc9f5c3adae83a3860ea2f1209ed41208",
+        "mergedAt": null,
+        "number": 59,
+        "state": "OPEN",
+        "title": "Kimi cache research: distinguish aggregate and per-request prefill budgets",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/59",
+        "relation_to_runtime": "not_in_local_object_store"
+      },
+      {
+        "baseRefName": "dev",
+        "headRefOid": "48be294f1287edc2f36adab036c64e96d1d5e0ff",
+        "mergedAt": null,
+        "number": 58,
+        "state": "OPEN",
+        "title": "Kimi cache research: fence in-place state before asynchronous reuse",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/58",
+        "relation_to_runtime": "not_in_local_object_store"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "91e4dde301c39256d7a8a0ddd15e846c2fbbfde1",
+        "mergedAt": null,
+        "number": 54,
+        "state": "OPEN",
+        "title": "fix(vllm): key multimodal placeholder tokens by image content",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/54",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev",
+        "headRefOid": "efdd432fbc37a4f7bc2f8649a008b393428cf36b",
+        "mergedAt": null,
+        "number": 53,
+        "state": "CLOSED",
+        "title": "fix(vllm): register recurrent pages with a physical slot geometry independent of the token cadence",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/53",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "fc9f44f58bc38cc2db5a3736f81432d35f3907f1",
+        "mergedAt": null,
+        "number": 46,
+        "state": "OPEN",
+        "title": "fix(vllm): never transfer null-block-backed chunks; bound retrieves by admitted external tokens",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/46",
+        "relation_to_runtime": "not_in_local_object_store"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "ba6993f46ae9290fc00c44b3903940f5b4bc26a1",
+        "mergedAt": null,
+        "number": 42,
+        "state": "OPEN",
+        "title": "fix(vllm-mp): exact computed-token bound, failed-load report for suppressed retrieves",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/42",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "b9f4c788e1d8c5b8ce293a6c51be5f7ef183b91c",
+        "mergedAt": null,
+        "number": 41,
+        "state": "OPEN",
+        "title": "fix(l2): delete() skips keys whose store is still in flight",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/41",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "ca4bec206f7b02ffddd7e95ed1223b6896e4a1f0",
+        "mergedAt": null,
+        "number": 40,
+        "state": "OPEN",
+        "title": "feat(fs): CRC-32C integrity trailer and fsync for native filesystem objects",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/40",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "ccb371598604a72072def303b9f251e1c176733e",
+        "mergedAt": null,
+        "number": 39,
+        "state": "OPEN",
+        "title": "feat(vllm-mp): deployment-wide cache namespace through the request cache_salt",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/39",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "466f6fad77cd25ecbed4cecd47274b3a5a020d5c",
+        "mergedAt": null,
+        "number": 38,
+        "state": "OPEN",
+        "title": "fix(l1): never serve or persist a reserved object whose write was not finished",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/38",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "8c7a7c87ec66033ba7528597e1b7c1cd4915a5f2",
+        "mergedAt": null,
+        "number": 37,
+        "state": "OPEN",
+        "title": "fix(l2): replay the fs_native startup snapshot newest-first so LRU evicts old objects",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/37",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "ab259a3149d38da3ab6d1bc8c28b0cfd671026d5",
+        "mergedAt": null,
+        "number": 36,
+        "state": "OPEN",
+        "title": "perf(mp): run multi-group engine-driven stores in the background",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/36",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev",
+        "headRefOid": "aeccdecca56297f4ea637cc3b1705bf5d4a40f71",
+        "mergedAt": null,
+        "number": 32,
+        "state": "OPEN",
+        "title": "fix(vllm): recompute mixed recurrent cache tails",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/32",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "aa369371435890fc3e6a2d1e6a00f37c83c23ab2",
+        "mergedAt": null,
+        "number": 31,
+        "state": "OPEN",
+        "title": "fix(vllm): keep hybrid MLA state rank-sharded",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/31",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "f88bd949eb91dbd165b313b7dbe2211fa65f57c8",
+        "mergedAt": null,
+        "number": 30,
+        "state": "OPEN",
+        "title": "[Fix][vLLM] Preserve explicit engine-driven chunk token geometry",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/30",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "27c7fd1086f51bb9f970b58c4da37f952d155109",
+        "mergedAt": null,
+        "number": 29,
+        "state": "OPEN",
+        "title": "[Fix][vLLM] Decouple MP heartbeat PING timeout from its cadence",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/29",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev",
+        "headRefOid": "b565c6a2ff5541e67f811ca85cbd0c8a3e043e0d",
+        "mergedAt": null,
+        "number": 28,
+        "state": "CLOSED",
+        "title": "[Fix][vLLM] Start per-instance MP heartbeat at KV-cache registration",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/28",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "26314dc94fbc8d7e426b0f50d18062f770026ee4",
+        "mergedAt": null,
+        "number": 27,
+        "state": "OPEN",
+        "title": "feat(mp): wire fine external chunks into vLLM",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/27",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "dev",
+        "headRefOid": "54fa43cf43b2cd59986a114ee6f554a8a27c52ee",
+        "mergedAt": null,
+        "number": 26,
+        "state": "OPEN",
+        "title": "feat(cli): add CPU-only standalone server mode",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/26",
+        "relation_to_runtime": "not_ancestor"
+      },
+      {
+        "baseRefName": "release/v0.5.2-glm52-dcp-base",
+        "headRefOid": "f7504adfbf340621c0e0dac359fd1628a3ca5f5f",
+        "mergedAt": "2026-08-17T16:47:05Z",
+        "number": 24,
+        "state": "MERGED",
+        "title": "[Fix][vLLM] Preserve replicated Mamba restore geometry",
+        "url": "https://github.com/local-inference-lab/LMCache/pull/24",
+        "relation_to_runtime": "ancestor"
+      }
+    ]
+  }
+}

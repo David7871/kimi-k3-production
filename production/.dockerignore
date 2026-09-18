@@ -1,0 +1,9 @@
+*
+!Dockerfile
+!source-lock.json
+!verify-image.py
+!runtime-manifest.sha256
+!runtime/
+!runtime/**
+!overlays/
+!overlays/**

@@ -1,46 +1,31 @@
-# Active Kimi-K3 production profile
+# Kimi-K3 production serving specification
 
-Active since 2026-08-30 KST:
+Status: **implemented; qualified** on the inspected reference host. The canonical
+portable deployment is [production/README.md](../production/README.md), with
+[source-lock.json](../production/source-lock.json) defining the exact source,
+model, and binary identities. The independently packaged image has build/CPU
+validation; it has not replaced the running service.
 
-- Compose: `/home/g0san/kimi-k3-production/candidates/all-compatible-20260829/runtime/compose.tp8-dflash-flashkda-320k-w4a8.yml`
-- Image: `kimi-k3-production-issue75-dspark@sha256:087276f1ec791909e71055d655eeadb3b35c246e46f2be21af9d210aa970a60b`
-- KDA prefill: FlashKDA checkpoint ABI with native SM120 TensorMap workspace
-  loads
-- QSRT MoE: W4A8-MX prefill with coupled H512/H128 boundaries; W4A16 decode
-- Maximum context: 320,000 tokens
-- KV cache: 1.75 GiB/rank, 1,081,344-token global DCP capacity
-- Scheduler budgets: target 3,080; draft input 3,080
-- Speculation: remote DFlash, fixed `K=3`
-- Restart policy: `unless-stopped`
+The current profile uses nine RTX PRO 6000 Blackwell GPUs with TP9/DCP9 and a
+colocated TP9 DFlash2 draft. Target weights are QSRT K2 with existing MXFP8 dense
+projections, BF16 model dtype, `fp8_ds_mla` target KV, and FP8 draft KV. Context
+is configured to 1,048,576 tokens, with four concurrent requests, a 4,624-token
+scheduler budget, 4,608-token recurrent/cache chunks, and 1,536-token prefix
+matching. The LMCache host pool is 48 GiB; the disk tier has a 2457.6 GiB ceiling.
 
-Qualification on the active profile:
+The runtime source identities are vLLM `a3693719528811ac605dfa236321a53e5770b120`,
+B12X `0d31d259c6f0e6733190a6b3af9881b874f10241`, and LMCache
+`98c8be0a655bdf5411a8a2335f21cb44a76083d7`. The vLLM identity is the production
+base plus the KDA integration; LMCache includes the resident-L1 prefetch fix.
+These supersede the earlier shared three-branch snapshot.
 
-- 8k standalone prefill: 1,765 tok/s (5,417 prompt tokens in 3.069 s),
-  versus the 957 tok/s FlashKDA baseline (+84%, 1.84x)
-- Normal completion: exact `W4A8-OK 42`
-- JSON schema: exact `{"answer":7}`
-- W4A8 decode rejected: 41.7 tok/s versus 49.7 tok/s with W4A16
-- Fixed-K3 steady proposal cycle: 46.99 ms / 21.28 cycles/s; target-side
-  entry drain 39.82 ms and remote draft RPC 6.83 ms
-- Dynamic workspace planning covers every M16/M64 token band; an exact
-  828-token request passes after the 1,791-tile / 5,373-task fix
-- W4A16 Trellis direct micro rejected: 18.86 versus 21.28 cycles/s; production
-  keeps `B12X_W4A16_TRELLIS_MICRO=0`
-- Final free VRAM: 376-514 MiB/rank; no allocator or EngineCore errors after
-  the final rollback boot
+The deployed fused KDA kernel changes intermediate precision and reduction
+order. Prior kernel checks reported smaller error against float64; model output
+is not bit-identical to the previous chain, and its cache namespace is isolated.
+The full configured context ceiling has not been retested. See the recipe's
+validation limits and [packaging evidence](../production/validation.json).
 
-Review PRs:
-
-- B12X: https://github.com/myshytf/b12x/pull/1
-- vLLM: https://github.com/myshytf/vllm/pull/1
-
-Rollback to the previous FlashKDA/W4A16-only profile:
-
-```bash
-docker compose -p kimi-k3-production \
-  -f /home/g0san/kimi-k3-production/candidates/all-compatible-20260829/runtime/compose.tp8-dflash-flashkda-320k.yml \
-  up -d --no-deps --force-recreate kimi-k3-production
-```
-
-The original immutable fine3072 image remains the second-level rollback at
-`/home/g0san/kimi-k3-production/compose.tp8-dflash-fine3072.yml`.
+Earlier TP8 / remote-draft instructions and measurements are historical exports.
+Use the current recipe's single Compose file; the historical override chain is
+not part of its deployment contract. No model weights, credentials, cache data,
+or production traffic logs are included in the current package.

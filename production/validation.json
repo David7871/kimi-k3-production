@@ -1,0 +1,109 @@
+{
+  "status": "qualified",
+  "scope": "Snapshot packaging, runtime file identity, and CPU launch checks; no new full-model serving qualification",
+  "checked_at_utc": "2026-09-18T11:17:27.681469+00:00",
+  "runtime_image": "ghcr.io/myshytf/kimi-k3@sha256:856320d49eb35e2a0652348b644813bac42ff23e2b7a9af193390c388e115e5d",
+  "base_image": "ghcr.io/myshytf/kimi-k3@sha256:9a0a5818b664e263ca68aba772f76ae2b2948e97e42d6bbfd0c3859507e76b30",
+  "checks": {
+    "docker_build": {
+      "result": "pass",
+      "command": "./run.sh build"
+    },
+    "runtime_file_identity": {
+      "result": "pass",
+      "checked_files": 3846,
+      "mismatches": 0,
+      "unexpected_runtime_files": 0,
+      "command": "docker run --rm --network none --entrypoint /opt/venv/bin/python IMAGE /recipe/verify-image.py"
+    },
+    "git_blob_identity": {
+      "result": "pass",
+      "checked_files": 3782,
+      "mismatches": 0,
+      "evidence": "observed/git-vs-runtime.json"
+    },
+    "launch_configuration": {
+      "result": "pass",
+      "command": "./run.sh check",
+      "tp": 9,
+      "dcp": 9,
+      "batched_tokens": 4624,
+      "scheduled_tokens": 4624,
+      "required_mixed_budget": 4620,
+      "speculative_tokens": 3
+    },
+    "compose_environment_comparison": {
+      "result": "pass",
+      "evidence": "observed/recipe-differences.json",
+      "unexplained_environment_differences": 0,
+      "documented_environment_differences": 4
+    },
+    "python_imports_and_native_registration": {
+      "result": "pass",
+      "modules": [
+        "torch",
+        "vllm",
+        "b12x",
+        "lmcache"
+      ],
+      "cuda_devices": 0,
+      "native_extension": "/opt/k3kda/_C_k3kda.abi3.so"
+    },
+    "model_metadata_and_shard_sizes": {
+      "result": "pass",
+      "mounts": "read-only",
+      "weight_tensor_loading": false,
+      "weight_content_hashing": false
+    },
+    "pinned_hf_config_vs_production": {
+      "result": "pass",
+      "target_config": "byte-identical",
+      "draft_config": "byte-identical"
+    },
+    "scheduler_cherry_pick": {
+      "result": "pass",
+      "evidence": "observed/integration-check.json"
+    },
+    "b12x_communication_file_integration": {
+      "result": "pass",
+      "files": 4,
+      "evidence": "observed/integration-check.json"
+    },
+    "script_validation": {
+      "result": "pass",
+      "checks": [
+        "ruff on new Python helpers",
+        "bash -n on shell scripts",
+        "git diff --check",
+        "Compose config render"
+      ]
+    },
+    "anonymous_registry_access": {
+      "base": "pass",
+      "runtime": "pass"
+    },
+    "production_unchanged": {
+      "result": "pass",
+      "image_id": "sha256:9a0a5818b664e263ca68aba772f76ae2b2948e97e42d6bbfd0c3859507e76b30",
+      "started_at": "2026-09-18T02:14:45.923198495Z",
+      "restart_performed": false
+    },
+    "locked_image_pull": {
+      "result": "pass",
+      "command": "./run.sh pull",
+      "digest": "sha256:856320d49eb35e2a0652348b644813bac42ff23e2b7a9af193390c388e115e5d"
+    }
+  },
+  "not_performed": [
+    "Full-model boot of the packaged image",
+    "New generation, quality, or performance benchmarks",
+    "1,048,576-token context qualification",
+    "Other GPU counts or topologies",
+    "Rehash of complete model weight contents"
+  ],
+  "prior_serving_evidence": {
+    "status": "qualified on the original host, before this packaging task",
+    "scope": "Prior KDA package reports include kernel float64 comparisons, streaming completion, warm/external-cache replay, and four active requests. These are not new results for the published image.",
+    "limitation": "The KDA change is not bit-identical to its predecessor. A 64k greedy continuation diverged; no full-model high-precision reference adjudicated that difference."
+  }
+}

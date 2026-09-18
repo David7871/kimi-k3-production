@@ -1,0 +1,34 @@
+{
+  "vllm_scheduler_cherry_pick": {
+    "pr_head": "b1d47908693ca3c45a614178eddc89d69e31e533",
+    "deployed_commit": "25ddae877302fdb7af46d10dba1cd3147b904b3e",
+    "pr_patch_id": "621af1441b77aa22222295e067651bb93471ba9a",
+    "deployed_patch_id": "621af1441b77aa22222295e067651bb93471ba9a"
+  },
+  "b12x_served_comm_source": [
+    {
+      "path": "b12x/comm/pcie/_dcp_a2a_cute.py",
+      "deployed_git_blob": "1c80014cc7a2c01ffd5b03bc9200fe728282274b",
+      "served_source_git_blob": "1c80014cc7a2c01ffd5b03bc9200fe728282274b",
+      "equal": true
+    },
+    {
+      "path": "b12x/comm/pcie/_switch_gather.py",
+      "deployed_git_blob": "5acf53a0fadbd2be8debb47b8c14e00ab136b161",
+      "served_source_git_blob": "5acf53a0fadbd2be8debb47b8c14e00ab136b161",
+      "equal": true
+    },
+    {
+      "path": "b12x/comm/pcie/pcie_dcp_a2a.py",
+      "deployed_git_blob": "109161ae21304ccd3e00b49be925e151948addb4",
+      "served_source_git_blob": "109161ae21304ccd3e00b49be925e151948addb4",
+      "equal": true
+    },
+    {
+      "path": "b12x/comm/pcie/pcie_dma.py",
+      "deployed_git_blob": "75f917d401ab93fc1b51601cc61ef634164e815a",
+      "served_source_git_blob": "75f917d401ab93fc1b51601cc61ef634164e815a",
+      "equal": true
+    }
+  ]
+}

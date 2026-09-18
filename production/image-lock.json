@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "status": "qualified",
+  "tag": "ghcr.io/myshytf/kimi-k3:runtime-20260918",
+  "image": "ghcr.io/myshytf/kimi-k3@sha256:856320d49eb35e2a0652348b644813bac42ff23e2b7a9af193390c388e115e5d",
+  "base": "ghcr.io/myshytf/kimi-k3@sha256:9a0a5818b664e263ca68aba772f76ae2b2948e97e42d6bbfd0c3859507e76b30",
+  "qualification_scope": "runtime file identity and CPU launch validation; no new full-model serving run"
+}

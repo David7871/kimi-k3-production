@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "status": "implemented",
+  "snapshot_utc": "2026-09-18T11:01:20.563528+00:00",
+  "base_image": "ghcr.io/myshytf/kimi-k3@sha256:9a0a5818b664e263ca68aba772f76ae2b2948e97e42d6bbfd0c3859507e76b30",
+  "observed_runtime": {
+    "image_id": "sha256:9a0a5818b664e263ca68aba772f76ae2b2948e97e42d6bbfd0c3859507e76b30",
+    "started_at": "2026-09-18T02:14:45.923198495Z",
+    "vllm_base_commit": "25ddae877302fdb7af46d10dba1cd3147b904b3e",
+    "overlay": "vllm/models/kimi_k3/nvidia/kda.py and /opt/k3kda/_C_k3kda.abi3.so",
+    "cache_namespace": "iso-156b34701b8fe391",
+    "ubatch_mode": "overlap moesplit=1 offset=2"
+  },
+  "sources": {
+    "vllm": {
+      "repository": "https://github.com/myshytf/vllm",
+      "commit": "a3693719528811ac605dfa236321a53e5770b120",
+      "archive_url": "https://codeload.github.com/myshytf/vllm/tar.gz/a3693719528811ac605dfa236321a53e5770b120",
+      "archive_sha256": "280f30b60c763f4bd15b9266e7baef54882779d9ef5d7831227dcc304e09601b",
+      "branch": "feat/kda-spec-fused-decode-20260918",
+      "runtime_note": "Base image is 25ddae8773; the active kda.py equals this commit. The native extension is separately pinned."
+    },
+    "b12x": {
+      "repository": "https://github.com/myshytf/b12x",
+      "commit": "0d31d259c6f0e6733190a6b3af9881b874f10241",
+      "archive_url": "https://codeload.github.com/myshytf/b12x/tar.gz/0d31d259c6f0e6733190a6b3af9881b874f10241",
+      "archive_sha256": "04f8d3dd3df5ad5d6b459459a0199b69e8e6b16329219fcd2cf8d944f28ad6b8",
+      "branch": "production/kimi-k3-20260917"
+    },
+    "lmcache": {
+      "repository": "https://github.com/myshytf/LMCache",
+      "commit": "98c8be0a655bdf5411a8a2335f21cb44a76083d7",
+      "archive_url": "https://codeload.github.com/myshytf/LMCache/tar.gz/98c8be0a655bdf5411a8a2335f21cb44a76083d7",
+      "archive_sha256": "54c427628b10c60aa821c47bb3d7e96da83429feab7b71789063d9fe860ccf5e",
+      "branch": "production/kimi-k3-20260917"
+    }
+  },
+  "models": {
+    "target": {
+      "repository": "lukealonso/Kimi-K3-QSRT-K2",
+      "revision": "3b98114115f1d41ce7963ba346c3fca19918b0bd",
+      "config_sha256": "a6f6eb81e23ce9d209a0d3fed6664e78431a1f074686c7c411b956de7aef4370",
+      "qsrt_manifest_sha256": "52be085512154a0ed6022d41a0be3b53e920db92695af06d366f03d5f40e4422",
+      "safetensors_files": 106,
+      "safetensors_bytes": 757524534968
+    },
+    "draft": {
+      "repository": "lightseekorg/kimi-k3-dflash2",
+      "revision": "e77935fb4804e17eb55085bffd045eae1d779769",
+      "config_sha256": "aac0900105b9099b99a452c728ff9c4685889d264f7bed0101e57788df8f09c8",
+      "safetensors_files": 1,
+      "safetensors_bytes": 7385765464
+    }
+  },
+  "runtime_files": {
+    "/runtime/serve_tp9.sh": "555eab2da2f2ce7c4964edd6aa4bbac3689adf83fc7d15bb097abf1f20ffa34b",
+    "/runtime/lmcache-mp-wrapper.sh": "07808c668b325648fb6e6bf7790c97561c9076e6f3114b47bc1b141759c4506b"
+  },
+  "native_extensions": {
+    "/opt/k3kda/_C_k3kda.abi3.so": "fa546e7ae1da450ff2d3b6515a598920d95ead8a628c766fa5b88ba56efc4749",
+    "/opt/k3ext/_C_k3ext.abi3.so": "5c2174c533256c946fd6220f3c80551da41b9dff6fbdf52eaf73e394f20506ac"
+  },
+  "kda_build_source_sha256": "b9ae6d4c60cc1e577f7dfb4328c49c567af65bf09f8cf49af6bc133f5850ae23",
+  "precision": {
+    "target_experts": "QSRT K2, qsrt_sqg_e4m3, sqg_xor_cheb_t12, qsrt_atoms_v2",
+    "dense_projections": "existing MXFP8 hybrid W8A16",
+    "model_dtype": "bfloat16",
+    "target_kv": "fp8_ds_mla",
+    "draft_kv": "fp8"
+  },
+  "packaging": "Exact deployed image plus copied live overlays and launch scripts; no extension rebuild",
+  "native_source": {
+    "repository": "https://github.com/myshytf/vllm",
+    "commit": "a3693719528811ac605dfa236321a53e5770b120",
+    "path": "csrc/libtorch_stable/kimi_k3/fused_kda_spec_decode_kernel.cu",
+    "sha256": "f3493a73f4b1c4c8519ee125d445958624445a89fdbcd2cc943813478f2d80d1",
+    "standalone_change": "The standalone build changes ../torch_utils.h to torch_utils.h; the transformed source hash is kda_build_source_sha256."
+  }
+}

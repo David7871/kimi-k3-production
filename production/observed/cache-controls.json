@@ -1,0 +1,12 @@
+{
+  "ubatch_mode": {
+    "path": "/cache/ubatch-mode",
+    "content": "overlap moesplit=1 offset=2\n"
+  },
+  "absent_markers": [
+    "/cache/tp9-colocated-prod/endpoint-cache-disable",
+    "/cache/precision-preserving/endpoint-debug-disable",
+    "/cache/tp9-colocated-prod/endpoint-cache-torch-copy",
+    "/cache/tp9-colocated-prod/draft-reuse-disable"
+  ]
+}

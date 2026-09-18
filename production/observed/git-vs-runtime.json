@@ -1,0 +1,20 @@
+{
+  "checked_files": 3782,
+  "mismatches": [],
+  "status": "qualified",
+  "scope": "Tracked files inside each runtime Python package, including B12X JIT sources; not tests/docs outside those packages or prebuilt untracked native extensions.",
+  "repositories": {
+    "vllm": {
+      "commit": "a3693719528811ac605dfa236321a53e5770b120",
+      "checked_files": 2849
+    },
+    "b12x": {
+      "commit": "0d31d259c6f0e6733190a6b3af9881b874f10241",
+      "checked_files": 250
+    },
+    "lmcache": {
+      "commit": "98c8be0a655bdf5411a8a2335f21cb44a76083d7",
+      "checked_files": 683
+    }
+  }
+}

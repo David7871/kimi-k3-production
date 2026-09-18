@@ -1,3 +1,8 @@
 *.log
 .DS_Store
 __pycache__/
+.ruff_cache/
+production/.env
+production/.build/
+production/state/
+production/*.local.json

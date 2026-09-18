@@ -1,0 +1,7 @@
+{
+  "entries": 2554,
+  "source_or_library_changes_outside_bind_mounts": [
+    "A /opt/k3kda/_C_k3kda.abi3.so"
+  ],
+  "note": "docker diff excludes bind mounts, which are recorded separately. Directory metadata, bytecode caches, logs, temporary IPC files and NVIDIA-injected host libraries are not copied."
+}

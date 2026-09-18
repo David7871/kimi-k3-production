@@ -1,0 +1,22 @@
+{
+  "status": "qualified",
+  "scope": "Explicit Compose environment compared with observed production values. Inherited image environment is recorded separately in environment.json.",
+  "differences": {
+    "K3_TP9_CPU_PIN": {
+      "observed": null,
+      "recipe": "0"
+    },
+    "LMCACHE_SHM_NAME": {
+      "observed": "kimik3_tp9_cachepath_212d96c1",
+      "recipe": "kimik3_qsrt_public_20260918"
+    },
+    "VLLM_PROFILER_DIR": {
+      "observed": "/cache/exact-hotpath/20260918T021444213961504Z",
+      "recipe": "/cache/profiler"
+    },
+    "LMCACHE_CACHE_NAMESPACE": {
+      "observed": "iso-156b34701b8fe391",
+      "recipe": "qsrt-k2-tp9-kda-a3693719-lm98c8be0a"
+    }
+  }
+}
