@@ -20,6 +20,7 @@ The ON and OFF arms came from different scripts and slightly different images. B
 - **Packs:** `/data/models/k3-moet-packs` are 714 GB and are not committed. Regenerate them with `build/convert_moet_packs.py` (driven by `build/conv-all.sh`). The checkpoint ID is `k3-mxfp4-moet-v1`.
 - **ON:** `bash ../launch.sh moet`. This uses `moet-mvp2`, `$INT6 + moet.envstr`, and `scripts/k3-arm-moet.sh`, which forwards `UP_IMAGE` to the rtx-02 worker.
 - **OFF, exactly as measured:** `bash ../launch.sh moet-off` (`moet-mvp`, `$INT6` only, same launcher).
+- **OFF on the ON image (README headline baseline, fu-off):** `bash ../launch.sh moet-off2` (`moet-mvp2`, `$INT6` only).
 - **GSM8K:** `python3 scripts/k3_gsm8k.py 8001 200 out.jsonl 8`.
 
 ## Notes

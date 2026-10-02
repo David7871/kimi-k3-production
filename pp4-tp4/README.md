@@ -113,6 +113,9 @@ bash configs/launch.sh baseline 16,256
 # Moet 2-bit experts (image kimi-k3-up-ray:moet-mvp2)
 bash configs/launch.sh moet 16,256
 
+# baseline row of the headline table (fu-off: moet-mvp2, Moet flag unset)
+bash configs/launch.sh moet-off2 16,256
+
 # Moet + PP rebalance (KV capacity)
 MOET=1 bash configs/launch.sh rebalance-kv 16,256
 ```
