@@ -1,0 +1,848 @@
+[
+ {
+  "file": "$HOME/nsys2/rtx-01/nsys-report-9645.sqlite",
+  "dev": [
+   7
+  ],
+  "period": 12.588024,
+  "steps": 82,
+  "busy": 96.73949484736276,
+  "idle_ms": 0.4103146219512195,
+  "cats": {
+   "pp-token-bcast": 12.577733243902438,
+   "moe-experts": 5.2949723414634144,
+   "norm/elementwise": 0.6162288780487805,
+   "tp-comm": 1.7388260365853658,
+   "dense-gemm": 4.8381222682926825,
+   "attn/mla": 0.2748240121951219,
+   "other": 0.11052040243902439,
+   "kda/linear-attn": 0.1417180243902439,
+   "moe-topk/router": 0.00505990243902439,
+   "pp-sendrecv": 0.8198792195121951
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    12.577733243902438
+   ],
+   [
+    "moe-experts",
+    "kernel_cutlass_kernel_b12xmoe__17...",
+    5.20683056097561
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_3...",
+    1.1111543292682926
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_10...",
+    1.0133665975609756
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_13...",
+    1.0046830487804879
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_21...",
+    0.841037987804878
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    0.8198792195121951
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_1...",
+    0.7282078780487805
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_12...",
+    0.41541617073170733
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_15...",
+    0.31284953658536585
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_19...",
+    0.2685597682926829
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.26308235365853655
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    0.18288640243902438
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.16791120731707318
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys2/rtx-02/nsys-report-00e8.sqlite",
+  "dev": [
+   1
+  ],
+  "period": 12.58048,
+  "steps": 81,
+  "busy": 96.57395473642403,
+  "idle_ms": 0.4301032222222222,
+  "cats": {
+   "pp-token-bcast": 12.524218777777778,
+   "dense-gemm": 5.034745172839506,
+   "moe-experts": 5.502088111111111,
+   "norm/elementwise": 0.6466138888888889,
+   "other": 0.12368987654320987,
+   "tp-comm": 1.744733987654321,
+   "attn/mla": 0.35936223456790123,
+   "moe-topk/router": 0.005297777777777778,
+   "kda/linear-attn": 0.15072072839506173,
+   "pp-sendrecv": 0.2990758765432099
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    12.524218777777778
+   ],
+   [
+    "moe-experts",
+    "kernel_cutlass_kernel_b12xmoe__10...",
+    5.4101134197530865
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_14...",
+    1.1499110000000001
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_3...",
+    1.0563313086419754
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_6...",
+    1.0322494197530863
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_2...",
+    0.8898715432098765
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_12...",
+    0.7511045308641975
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_5...",
+    0.431735950617284
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.34739345679012346
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_8...",
+    0.3056327283950617
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    0.2990758765432099
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_15...",
+    0.28055651851851854
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    0.18930482716049382
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.1826749012345679
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys2/rtx-02/nsys-report-0952.sqlite",
+  "dev": [
+   5
+  ],
+  "period": 12.583985,
+  "steps": 81,
+  "busy": 96.3909362940884,
+  "idle_ms": 0.4529307777777778,
+  "cats": {
+   "tp-comm": 1.80032287654321,
+   "norm/elementwise": 0.6531594074074074,
+   "dense-gemm": 5.12634812345679,
+   "attn/mla": 0.4015124691358024,
+   "other": 0.21921044444444446,
+   "kda/linear-attn": 0.1336844814814815,
+   "moe-experts": 5.279524851851852,
+   "moe-topk/router": 0.00571220987654321,
+   "pp-token-bcast": 0.020222086419753087,
+   "pp-sendrecv": 0.030076135802469137
+  },
+  "top": [
+   [
+    "moe-experts",
+    "kernel_cutlass_kernel_b12xmoe__10...",
+    5.189288950617284
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_3...",
+    1.0092936790123457
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_14...",
+    0.9881234814814815
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_6...",
+    0.987715950617284
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_2...",
+    0.7881109012345678
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_12...",
+    0.773861962962963
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_5...",
+    0.4149988148148149
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_32x16x128__26...",
+    0.3927942839506173
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.38761019753086423
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_8...",
+    0.28576609876543213
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_15...",
+    0.26792767901234565
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    0.18599045679012347
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_20...",
+    0.1788406049382716
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.1749594814814815
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys2/rtx-02/nsys-report-2ed0.sqlite",
+  "dev": [
+   6
+  ],
+  "period": 12.578036,
+  "steps": 81,
+  "busy": 96.45217655981305,
+  "idle_ms": 0.446334024691358,
+  "cats": {
+   "moe-experts": 5.3048662222222225,
+   "norm/elementwise": 0.6458405679012346,
+   "tp-comm": 1.8518172716049381,
+   "dense-gemm": 5.141499098765432,
+   "attn/mla": 0.40014091358024695,
+   "other": 0.17954407407407408,
+   "kda/linear-attn": 0.13431769135802468,
+   "moe-topk/router": 0.005744197530864198,
+   "pp-token-bcast": 0.009955987654320987,
+   "pp-sendrecv": 0.0291571975308642
+  },
+  "top": [
+   [
+    "moe-experts",
+    "kernel_cutlass_kernel_b12xmoe__16...",
+    5.215209209876543
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_9...",
+    1.0115524691358024
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_20...",
+    0.9947633950617284
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_12...",
+    0.9505377777777778
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_8...",
+    0.7917218765432099
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_18...",
+    0.7746446172839506
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_11...",
+    0.4157112469135803
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_32x16x128__5...",
+    0.3932796419753087
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.3862726543209876
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_14...",
+    0.3257862716049382
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_21...",
+    0.26897053086419753
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    0.1848303086419753
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_26...",
+    0.17815346913580246
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.1750897901234568
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys2/rtx-02/nsys-report-3101.sqlite",
+  "dev": [
+   0
+  ],
+  "period": 12.601762,
+  "steps": 81,
+  "busy": 96.59040675870924,
+  "idle_ms": 0.4292282222222222,
+  "cats": {
+   "pp-token-bcast": 12.560767530864197,
+   "norm/elementwise": 0.6468884074074074,
+   "dense-gemm": 5.0438001851851855,
+   "tp-comm": 1.7547136543209878,
+   "attn/mla": 0.35913123456790125,
+   "other": 0.11372970370370371,
+   "kda/linear-attn": 0.1509803950617284,
+   "moe-experts": 5.52094375308642,
+   "moe-topk/router": 0.0051374197530864195,
+   "pp-sendrecv": 0.29956250617283947
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    12.560767530864197
+   ],
+   [
+    "moe-experts",
+    "kernel_cutlass_kernel_b12xmoe__10...",
+    5.428948530864197
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_14...",
+    1.1527765555555556
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_3...",
+    1.0592076049382717
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_6...",
+    1.0088776790123457
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_2...",
+    0.8897934197530865
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_12...",
+    0.7529323456790123
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_5...",
+    0.4334162098765432
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.34727698765432097
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_8...",
+    0.3399216790123457
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    0.29956250617283947
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_15...",
+    0.2806811604938272
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    0.19096475308641975
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.18230666666666667
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys2/rtx-02/nsys-report-562a.sqlite",
+  "dev": [
+   2
+  ],
+  "period": 12.57376,
+  "steps": 81,
+  "busy": 96.5624254108886,
+  "idle_ms": 0.43254396296296294,
+  "cats": {
+   "pp-token-bcast": 12.555800592592593,
+   "dense-gemm": 5.057602111111112,
+   "norm/elementwise": 0.6384642962962963,
+   "tp-comm": 1.739702037037037,
+   "moe-experts": 5.532891765432099,
+   "other": 0.11616459259259258,
+   "attn/mla": 0.3584132222222222,
+   "kda/linear-attn": 0.15069514814814816,
+   "moe-topk/router": 0.005111703703703704,
+   "pp-sendrecv": 0.2950841851851852
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    12.555800592592593
+   ],
+   [
+    "moe-experts",
+    "kernel_cutlass_kernel_b12xmoe__15...",
+    5.440127148148148
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_19...",
+    1.156064098765432
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_8...",
+    1.0591267530864197
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_11...",
+    0.9876070370370371
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    0.8904907283950618
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_17...",
+    0.7512138518518519
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_10...",
+    0.43659275308641976
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_13...",
+    0.34710317283950615
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.34652064197530863
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    0.2950841851851852
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_20...",
+    0.2812671358024691
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    0.18998871604938272
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.17883233333333334
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys2/rtx-02/nsys-report-8766.sqlite",
+  "dev": [
+   4
+  ],
+  "period": 12.599508,
+  "steps": 81,
+  "busy": 96.42002939360958,
+  "idle_ms": 0.4506811728395062,
+  "cats": {
+   "moe-experts": 5.300623320987654,
+   "dense-gemm": 5.138392938271605,
+   "norm/elementwise": 0.655889950617284,
+   "tp-comm": 1.8592588024691359,
+   "attn/mla": 0.40114023456790127,
+   "other": 0.17600823456790124,
+   "kda/linear-attn": 0.13433832098765433,
+   "moe-topk/router": 0.0058307160493827155,
+   "pp-token-bcast": 0.014989444444444444,
+   "pp-sendrecv": 0.02920066666666667
+  },
+  "top": [
+   [
+    "moe-experts",
+    "kernel_cutlass_kernel_b12xmoe__10...",
+    5.211054358024691
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_3...",
+    1.0123074691358025
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_14...",
+    0.994556901234568
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_6...",
+    0.9702781358024691
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_2...",
+    0.7902313950617283
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_12...",
+    0.7731558271604938
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_5...",
+    0.41616901234567905
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_32x16x128__26...",
+    0.39202233333333336
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.3873268641975309
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_8...",
+    0.3172470864197531
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_15...",
+    0.2697622345679012
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    0.1859876049382716
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_20...",
+    0.17882748148148148
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.17785728395061728
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys2/rtx-02/nsys-report-9d5d.sqlite",
+  "dev": [
+   7
+  ],
+  "period": 12.574702,
+  "steps": 81,
+  "busy": 96.32945134366486,
+  "idle_ms": 0.46196134567901237,
+  "cats": {
+   "dense-gemm": 5.161840580246913,
+   "moe-experts": 5.313142580246914,
+   "norm/elementwise": 0.6590537901234568,
+   "other": 0.1677684938271605,
+   "tp-comm": 1.8210128765432096,
+   "attn/mla": 0.4061426790123457,
+   "kda/linear-attn": 0.13477530864197532,
+   "moe-topk/router": 0.0057520864197530865,
+   "pp-token-bcast": 0.010413777777777779,
+   "pp-sendrecv": 0.029464777777777777
+  },
+  "top": [
+   [
+    "moe-experts",
+    "kernel_cutlass_kernel_b12xmoe__10...",
+    5.222936728395062
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_3...",
+    1.0143506790123458
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_14...",
+    0.9970873456790124
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_6...",
+    0.8983972098765431
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_2...",
+    0.7907593086419752
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_12...",
+    0.7800096419753086
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_5...",
+    0.4192588148148148
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_32x16x128__26...",
+    0.391836975308642
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.3917301111111111
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_8...",
+    0.3310693333333333
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_15...",
+    0.2742108641975309
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    0.18770546913580247
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    0.18593601234567902
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_20...",
+    0.1808555061728395
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys2/rtx-02/nsys-report-a572.sqlite",
+  "dev": [
+   3
+  ],
+  "period": 12.582233,
+  "steps": 81,
+  "busy": 96.59023492105818,
+  "idle_ms": 0.4291160987654321,
+  "cats": {
+   "pp-token-bcast": 12.557865691358025,
+   "moe-experts": 5.520412209876543,
+   "norm/elementwise": 0.6416530123456791,
+   "tp-comm": 1.7544824197530866,
+   "dense-gemm": 5.050390765432099,
+   "attn/mla": 0.357473024691358,
+   "other": 0.1271194074074074,
+   "kda/linear-attn": 0.15053017283950618,
+   "moe-topk/router": 0.005305679012345679,
+   "pp-sendrecv": 0.2977483209876543
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    12.557865691358025
+   ],
+   [
+    "moe-experts",
+    "kernel_cutlass_kernel_b12xmoe__10...",
+    5.429371950617284
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_14...",
+    1.154322938271605
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_3...",
+    1.0599116296296296
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_6...",
+    1.0037474814814815
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_2...",
+    0.8897218395061729
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_12...",
+    0.7546702222222222
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_5...",
+    0.4336347777777778
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.3454824444444444
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_8...",
+    0.3430125802469136
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    0.2977483209876543
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_vllmmode_15...",
+    0.2808709135802469
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    0.1889457283950617
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.17811762962962963
+   ]
+  ]
+ }
+]

@@ -1,0 +1,6 @@
+C16 decode=369.7 per_req=23.1
+C16 decode=372.2 per_req=23.3
+C16 decode=373.8 per_req=23.4
+C256 decode=1396.6 per_req=5.5
+C256 decode=1394.5 per_req=5.4
+C256 decode=1387.8 per_req=5.4

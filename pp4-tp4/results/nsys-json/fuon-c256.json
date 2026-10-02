@@ -1,0 +1,1506 @@
+[
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-01/nsys-report-1408.sqlite",
+  "dev": [
+   1
+  ],
+  "period": 46.09808,
+  "steps": 71,
+  "busy": 93.76153739654238,
+  "idle_ms": 2.8820807605633805,
+  "cats": {
+   "pp-token-bcast": 46.19100809859155,
+   "moe-experts": 24.91050908450704,
+   "other": 0.3824202112676056,
+   "moe-topk/router": 0.588484309859155,
+   "norm/elementwise": 3.8855999718309855,
+   "tp-comm": 7.12498271830986,
+   "dense-gemm": 5.0320256197183095,
+   "attn/mla": 0.27555878873239437,
+   "kda/linear-attn": 2.1273241408450705,
+   "pp-sendrecv": 0.03375121126760563
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    46.19100809859155
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    24.91050908450704
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    4.08937023943662
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    2.085708661971831
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_8...",
+    1.8783476901408451
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.1991892535211268
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_22...",
+    1.1971248591549295
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__9...",
+    1.1757061830985915
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_20...",
+    0.9310387887323943
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9175395352112676
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    0.9074488309859154
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.7926348169014084
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_11...",
+    0.5650932394366197
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.4741971267605634
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-01/nsys-report-4fc9.sqlite",
+  "dev": [
+   6
+  ],
+  "period": 45.874702,
+  "steps": 71,
+  "busy": 97.92738892092818,
+  "idle_ms": 0.9560869014084508,
+  "cats": {
+   "pp-token-bcast": 45.95249071830985,
+   "moe-experts": 26.0597198028169,
+   "other": 0.3954003239436619,
+   "moe-topk/router": 0.6177497746478873,
+   "norm/elementwise": 4.116292084507042,
+   "tp-comm": 7.668517521126761,
+   "dense-gemm": 4.991011112676056,
+   "attn/mla": 0.34716091549295774,
+   "kda/linear-attn": 2.0184578169014085,
+   "pp-sendrecv": 0.11105761971830987
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    45.95249071830985
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    26.0597198028169
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.981227507042253
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    1.978880014084507
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.7882321549295774
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_13...",
+    1.4558294929577464
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.3000484225352114
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__15...",
+    1.1886685774647887
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_11...",
+    1.1590861267605632
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.0723743943661972
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9524711549295775
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8385803661971831
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_17...",
+    0.5641283802816901
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.498282661971831
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-01/nsys-report-6d2e.sqlite",
+  "dev": [
+   2
+  ],
+  "period": 45.980598,
+  "steps": 71,
+  "busy": 93.51311281550828,
+  "idle_ms": 2.997803704225352,
+  "cats": {
+   "pp-token-bcast": 46.20554032394366,
+   "moe-experts": 24.969463309859155,
+   "norm/elementwise": 3.8941507746478874,
+   "tp-comm": 6.947701239436619,
+   "dense-gemm": 5.040160521126761,
+   "attn/mla": 0.27576425352112677,
+   "kda/linear-attn": 2.1308484084507042,
+   "moe-topk/router": 0.5911734788732395,
+   "other": 0.3847757887323944,
+   "pp-sendrecv": 0.027632478873239434
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    46.20554032394366
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    24.969463309859155
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.874841647887324
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    2.089156309859155
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_8...",
+    1.8811865070422535
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_22...",
+    1.2088797183098592
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.2005465774647885
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__9...",
+    1.176552394366197
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_20...",
+    0.9627291830985917
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.919918014084507
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    0.901250690140845
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.7933798028169013
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_11...",
+    0.5665247042253521
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.4742951830985915
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-01/nsys-report-6e10.sqlite",
+  "dev": [
+   5
+  ],
+  "period": 46.142255,
+  "steps": 71,
+  "busy": 97.97557574552097,
+  "idle_ms": 0.9351512535211268,
+  "cats": {
+   "pp-token-bcast": 46.02966007042254,
+   "moe-experts": 26.113418690140843,
+   "other": 0.3938849718309859,
+   "moe-topk/router": 0.6147980845070422,
+   "norm/elementwise": 4.129268056338028,
+   "tp-comm": 7.6838084084507035,
+   "dense-gemm": 4.979006366197183,
+   "attn/mla": 0.36237845070422536,
+   "kda/linear-attn": 2.0196842535211266,
+   "pp-sendrecv": 0.10811607042253521
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    46.02966007042254
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    26.113418690140843
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    4.018379450704225
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    1.9800765352112675
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.7793954929577465
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_13...",
+    1.4612432535211268
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.2906932253521126
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__15...",
+    1.186536732394366
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_11...",
+    1.1202789436619718
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.0839067605633803
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9626012816901408
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8480826197183099
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_17...",
+    0.5664968732394365
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.5002217746478873
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-01/nsys-report-a49c.sqlite",
+  "dev": [
+   3
+  ],
+  "period": 45.993774,
+  "steps": 71,
+  "busy": 93.78104727464483,
+  "idle_ms": 2.8744083802816904,
+  "cats": {
+   "pp-token-bcast": 46.2126746056338,
+   "moe-experts": 24.912252267605634,
+   "other": 0.37862004225352114,
+   "moe-topk/router": 0.5914764225352113,
+   "norm/elementwise": 3.896160042253521,
+   "tp-comm": 7.139042732394366,
+   "dense-gemm": 5.030093746478873,
+   "attn/mla": 0.2807124647887324,
+   "kda/linear-attn": 2.1375667746478877,
+   "pp-sendrecv": 0.027346901408450704
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    46.2126746056338
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    24.912252267605634
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    4.0993666056338025
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    2.0958226619718308
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_8...",
+    1.877022957746479
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_22...",
+    1.2015400422535212
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.1908679999999998
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__9...",
+    1.1761728028169014
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_20...",
+    0.9326180140845071
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9221301126760564
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    0.9055180704225352
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8019290845070423
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_11...",
+    0.5654573521126761
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.4748197605633803
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-01/nsys-report-b804.sqlite",
+  "dev": [
+   4
+  ],
+  "period": 45.962111,
+  "steps": 71,
+  "busy": 97.93298552886218,
+  "idle_ms": 0.9546419718309859,
+  "cats": {
+   "pp-token-bcast": 46.014647225352114,
+   "moe-experts": 26.170941690140847,
+   "norm/elementwise": 4.0987575070422535,
+   "tp-comm": 7.616846183098591,
+   "dense-gemm": 5.002019718309859,
+   "attn/mla": 0.34794407042253517,
+   "kda/linear-attn": 2.024104732394366,
+   "moe-topk/router": 0.6202918450704225,
+   "other": 0.39618850704225356,
+   "pp-sendrecv": 0.10897449295774647
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    46.014647225352114
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    26.170941690140847
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.9153588873239435
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    1.984513690140845
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.7978791126760563
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_13...",
+    1.4667267464788731
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.2894302253521128
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__15...",
+    1.189920014084507
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_11...",
+    1.1570017746478873
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.0777587746478872
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.948139676056338
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8286647323943662
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_17...",
+    0.5675528450704226
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.5013347605633803
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-01/nsys-report-c2f5.sqlite",
+  "dev": [
+   0
+  ],
+  "period": 45.937606,
+  "steps": 71,
+  "busy": 93.78726124475952,
+  "idle_ms": 2.8700445070422536,
+  "cats": {
+   "pp-token-bcast": 46.188907915492955,
+   "moe-experts": 24.909112070422534,
+   "other": 0.3809021267605634,
+   "moe-topk/router": 0.5881491549295774,
+   "norm/elementwise": 3.913875211267605,
+   "tp-comm": 7.109309197183098,
+   "dense-gemm": 5.03924352112676,
+   "attn/mla": 0.2761633802816902,
+   "kda/linear-attn": 2.1285714788732397,
+   "pp-sendrecv": 0.03383870422535211
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    46.188907915492955
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    24.909112070422534
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    4.030759746478873
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    2.086859070422535
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_8...",
+    1.8809590422535212
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.213811690140845
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_22...",
+    1.2066271267605633
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__9...",
+    1.1834384225352113
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_20...",
+    0.965586352112676
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9134382676056338
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    0.9063359718309858
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8033811267605634
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_11...",
+    0.5638141971830986
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.47660452112676055
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-01/nsys-report-e1f9.sqlite",
+  "dev": [
+   7
+  ],
+  "period": 45.944292,
+  "steps": 71,
+  "busy": 97.93271036237873,
+  "idle_ms": 0.9554397887323943,
+  "cats": {
+   "pp-token-bcast": 46.05912946478873,
+   "tp-comm": 7.6439654647887325,
+   "dense-gemm": 5.0046276478873235,
+   "moe-topk/router": 0.6114476056338027,
+   "attn/mla": 0.34942316901408454,
+   "norm/elementwise": 4.137629718309859,
+   "other": 0.39693945070422537,
+   "moe-experts": 26.139510084507044,
+   "kda/linear-attn": 2.020929211267606,
+   "pp-sendrecv": 0.10955776056338028
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    46.05912946478873
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    26.139510084507044
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.9947095633802814
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    1.9813318591549296
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.7945992253521126
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_13...",
+    1.4437380704225353
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.2932288873239435
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__15...",
+    1.1886761549295775
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_11...",
+    1.124647281690141
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.0808705492957746
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9685193943661972
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8472189154929578
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_17...",
+    0.5644936338028169
+   ],
+   [
+    "norm/elementwise",
+    "vectorized_elementwise_kernel",
+    0.4980259154929577
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-02/nsys-report-3007.sqlite",
+  "dev": [
+   0
+  ],
+  "period": 45.977123,
+  "steps": 71,
+  "busy": 97.91476841942927,
+  "idle_ms": 0.9629677323943663,
+  "cats": {
+   "pp-token-bcast": 45.31148964788732,
+   "norm/elementwise": 4.3291938591549295,
+   "tp-comm": 6.496500647887324,
+   "dense-gemm": 5.230566985915493,
+   "attn/mla": 0.49239738028169017,
+   "kda/linear-attn": 2.1208786760563383,
+   "moe-topk/router": 0.632081014084507,
+   "other": 0.4438220704225352,
+   "moe-experts": 25.643877422535212,
+   "pp-sendrecv": 1.121445028169014
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    45.31148964788732
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    25.643877422535212
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.5958282112676057
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    2.079253774647887
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.895310943661972
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.3734561549295776
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__8...",
+    1.246669366197183
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    1.121445028169014
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_19...",
+    1.0478914084507043
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.023055422535211
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9982046619718309
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8838859154929577
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_17...",
+    0.8297256056338028
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_10...",
+    0.5881715211267606
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-02/nsys-report-32b9.sqlite",
+  "dev": [
+   1
+  ],
+  "period": 46.215266,
+  "steps": 71,
+  "busy": 97.91071017682448,
+  "idle_ms": 0.9651177464788732,
+  "cats": {
+   "pp-token-bcast": 45.33037666197183,
+   "dense-gemm": 5.222669169014084,
+   "moe-topk/router": 0.650887690140845,
+   "norm/elementwise": 4.270739056338028,
+   "other": 0.4423024788732395,
+   "moe-experts": 25.677973366197183,
+   "tp-comm": 6.5215885633802815,
+   "attn/mla": 0.4888115633802817,
+   "kda/linear-attn": 2.1266904507042255,
+   "pp-sendrecv": 1.1190048591549295
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    45.33037666197183
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    25.677973366197183
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.7575887887323947
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    2.084910225352113
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.8897819718309858
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.3391605774647886
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__8...",
+    1.2468175070422536
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    1.1190048591549295
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.0251931408450705
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9814719014084508
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_19...",
+    0.943021690140845
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8770944225352113
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_17...",
+    0.7957849436619718
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_10...",
+    0.5873851830985916
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-02/nsys-report-339d.sqlite",
+  "dev": [
+   2
+  ],
+  "period": 45.845959,
+  "steps": 71,
+  "busy": 97.77186575808469,
+  "idle_ms": 1.0275915633802817,
+  "cats": {
+   "pp-token-bcast": 45.33092474647887,
+   "moe-experts": 25.549223112676057,
+   "norm/elementwise": 4.317032042253521,
+   "tp-comm": 6.490534873239437,
+   "dense-gemm": 5.2150831549295775,
+   "attn/mla": 0.4651837605633803,
+   "kda/linear-attn": 2.1235751971830985,
+   "moe-topk/router": 0.6568210422535211,
+   "other": 0.4160434366197183,
+   "pp-sendrecv": 1.1038557746478874
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    45.33092474647887
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    25.549223112676057
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.6798955915492955
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    2.0818178732394363
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.8822260985915495
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.3668789014084506
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__8...",
+    1.2466383943661972
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    1.1038557746478874
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.007400971830986
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9957520845070422
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_19...",
+    0.984891605633803
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8751301830985915
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_17...",
+    0.818346704225352
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_10...",
+    0.5871642394366198
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-02/nsys-report-6e2d.sqlite",
+  "dev": [
+   6
+  ],
+  "period": 45.793902,
+  "steps": 71,
+  "busy": 97.73836246871372,
+  "idle_ms": 1.043031633802817,
+  "cats": {
+   "moe-experts": 25.131261014084508,
+   "other": 1.0661658732394366,
+   "moe-topk/router": 0.622699676056338,
+   "norm/elementwise": 4.143622746478874,
+   "tp-comm": 6.916295957746478,
+   "dense-gemm": 5.036610591549296,
+   "attn/mla": 0.5244850985915492,
+   "kda/linear-attn": 1.9000695492957744,
+   "pp-token-bcast": 0.009339478873239437,
+   "pp-sendrecv": 0.9520872253521127
+  },
+  "top": [
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    25.131261014084508
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.4928462816901407
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    1.862621915492958
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.794559633802817
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.3790608591549296
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.2712361971830985
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__8...",
+    1.1857202816901409
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_19...",
+    1.1014531549295776
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9785069577464789
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    0.9520872253521127
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_17...",
+    0.942935661971831
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.848215323943662
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_10...",
+    0.5651515352112676
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.5097619436619718
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-02/nsys-report-7b75.sqlite",
+  "dev": [
+   4
+  ],
+  "period": 45.843945,
+  "steps": 71,
+  "busy": 97.72995843562033,
+  "idle_ms": 1.0483742957746478,
+  "cats": {
+   "tp-comm": 7.043319126760563,
+   "dense-gemm": 5.032939450704226,
+   "moe-topk/router": 0.6174308309859156,
+   "attn/mla": 0.5257411830985915,
+   "norm/elementwise": 4.149642197183098,
+   "other": 0.955318042253521,
+   "moe-experts": 25.107225028169015,
+   "kda/linear-attn": 1.900001028169014,
+   "pp-token-bcast": 0.010831802816901409,
+   "pp-sendrecv": 1.019597661971831
+  },
+  "top": [
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    25.107225028169015
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.46824738028169
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    1.8623054647887325
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.7903621549295774
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.4078845492957746
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.2753707183098593
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_19...",
+    1.2044912394366196
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__8...",
+    1.1898371267605634
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    1.019597661971831
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9887280281690142
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_17...",
+    0.9626959577464788
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8379452957746478
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_10...",
+    0.5646855774647886
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.5109332676056338
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-02/nsys-report-8acc.sqlite",
+  "dev": [
+   7
+  ],
+  "period": 46.034778,
+  "steps": 71,
+  "busy": 97.88205169624139,
+  "idle_ms": 0.9780705211267605,
+  "cats": {
+   "tp-comm": 7.089878859154929,
+   "attn/mla": 0.5313490845070423,
+   "dense-gemm": 5.04390685915493,
+   "norm/elementwise": 4.19156171830986,
+   "moe-topk/router": 0.623917309859155,
+   "other": 0.9582338450704226,
+   "moe-experts": 25.085569450704224,
+   "kda/linear-attn": 1.89712538028169,
+   "pp-token-bcast": 0.010980436619718311,
+   "pp-sendrecv": 1.0056389436619717
+  },
+  "top": [
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    25.085569450704224
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.600783704225352
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    1.859524633802817
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.7959208169014085
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.4661809859154928
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.2685860422535211
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__8...",
+    1.191152661971831
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_19...",
+    1.0957977887323944
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    1.0195197605633803
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    1.0056389436619717
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_17...",
+    0.9271163802816902
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8467443802816901
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_10...",
+    0.5639420422535211
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.5164510985915493
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-02/nsys-report-d1e3.sqlite",
+  "dev": [
+   3
+  ],
+  "period": 45.993077,
+  "steps": 71,
+  "busy": 97.77304924607363,
+  "idle_ms": 1.0286221267605635,
+  "cats": {
+   "pp-token-bcast": 45.32640366197183,
+   "kda/linear-attn": 2.126977873239437,
+   "dense-gemm": 5.216230352112676,
+   "tp-comm": 6.606002169014085,
+   "attn/mla": 0.4739879295774648,
+   "norm/elementwise": 4.289739577464789,
+   "moe-topk/router": 0.6496641971830985,
+   "other": 0.42128494366197183,
+   "moe-experts": 25.539297295774645,
+   "pp-sendrecv": 1.0962470000000002
+  },
+  "top": [
+   [
+    "pp-token-bcast",
+    "ncclDevKernel_Broadcast_RING",
+    45.32640366197183
+   ],
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    25.539297295774645
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.7991993943661972
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    2.0853516760563378
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.8780697464788731
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.3352070985915494
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__8...",
+    1.2466602676056338
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    1.0962470000000002
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.0355347323943662
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    1.0035098732394365
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_19...",
+    0.9544678028169014
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8760309014084507
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_17...",
+    0.8168002394366197
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_10...",
+    0.5873941408450705
+   ]
+  ]
+ },
+ {
+  "file": "$HOME/nsys-fuon-c256/rtx-02/nsys-report-d48a.sqlite",
+  "dev": [
+   5
+  ],
+  "period": 46.177149,
+  "steps": 71,
+  "busy": 97.74573242399495,
+  "idle_ms": 1.0413744507042253,
+  "cats": {
+   "dense-gemm": 5.055537774647887,
+   "tp-comm": 6.919761225352112,
+   "attn/mla": 0.5291708169014084,
+   "norm/elementwise": 4.194732,
+   "moe-topk/router": 0.6235244929577465,
+   "other": 0.9624541830985917,
+   "moe-experts": 25.181623647887324,
+   "kda/linear-attn": 1.8966617887323942,
+   "pp-token-bcast": 0.012458366197183098,
+   "pp-sendrecv": 1.0161407605633803
+  },
+  "top": [
+   [
+    "moe-experts",
+    "moe_w2_mm",
+    25.181623647887324
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllReduce_bf16_RING",
+    3.444995535211268
+   ],
+   [
+    "kda/linear-attn",
+    "kda_decode_fusion_many_heads_kernel",
+    1.8590207746478873
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_7...",
+    1.8087046338028168
+   ],
+   [
+    "tp-comm",
+    "ncclDevKernel_AllGather_RING",
+    1.3875738169014085
+   ],
+   [
+    "norm/elementwise",
+    "elementwise_kernel",
+    1.2975684929577465
+   ],
+   [
+    "dense-gemm",
+    "nvjet_sm120_tst_mma_64x32x128__8...",
+    1.1913390704225353
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_19...",
+    1.1615471126760564
+   ],
+   [
+    "pp-sendrecv",
+    "ncclDevKernel_SendRecv",
+    1.0161407605633803
+   ],
+   [
+    "norm/elementwise",
+    "unrolled_elementwise_kernel",
+    0.9849292253521127
+   ],
+   [
+    "tp-comm",
+    "kernel_cutlass_kernel_b12xcomm_17...",
+    0.9256447605633802
+   ],
+   [
+    "norm/elementwise",
+    "index_elementwise_kernel",
+    0.8567231267605634
+   ],
+   [
+    "dense-gemm",
+    "kernel_cutlass_kernel_b12x_lib_10...",
+    0.5641834084507042
+   ],
+   [
+    "attn/mla",
+    "_attn_res_kernel",
+    0.5143782535211268
+   ]
+  ]
+ }
+]

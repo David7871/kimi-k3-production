@@ -1,0 +1,3 @@
+C1 decode=30.8 per_req=30.8
+C8 decode=202.1 per_req=25.3
+C16 decode=314.9 per_req=19.7

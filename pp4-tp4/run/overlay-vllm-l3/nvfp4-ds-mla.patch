@@ -1,0 +1,389 @@
+--- /tmp/kvfp4/pristine_k3_mla.py	2026-10-01 01:43:56.641054391 +0000
++++ /data/models/k3-run/overlay-vllm-l3/k3_nvidia_mla.py	2026-10-01 01:49:49.964557167 +0000
+@@ -56,6 +56,7 @@
+     should_load_quant_weights,
+ )
+ from vllm.model_executor.layers.attention.mla_attention import (
++    _gather_dequant_nvfp4_ds_mla,
+     _get_kv_b_proj_input_dtype,
+     _preallocate_absorbed_mla_weights,
+     _run_mla_query_bmm,
+@@ -618,7 +619,7 @@
+             query_dtype = (
+                 torch.float8_e4m3fn
+                 if is_quantized_kv_cache(self.kv_cache_dtype)
+-                and self.kv_cache_dtype != "fp8_ds_mla"
++                and self.kv_cache_dtype not in ("fp8_ds_mla", "nvfp4_ds_mla")
+                 else dtype
+             )
+             self.dcp_manager = MLADCPManager(
+@@ -865,7 +866,7 @@
+         cache = self.kv_cache
+         if (
+             is_quantized_kv_cache(self.kv_cache_dtype)
+-            and self.kv_cache_dtype != "fp8_ds_mla"
++            and self.kv_cache_dtype not in ("fp8_ds_mla", "nvfp4_ds_mla")
+         ):
+             return cache.view(current_platform.fp8_dtype())
+         return cache
+@@ -1109,6 +1110,39 @@
+                 positions=positions,
+                 cos_sin_cache=cos_sin_cache,
+             )
++        if self.kv_cache_dtype == "nvfp4_ds_mla":
++            # 432-byte packed NVFP4 records. No fused K3 epilogue writes this
++            # layout, so rotate the 64-dim rope halves here, concat the BF16
++            # decode query, and store the latent with the dedicated NVFP4 MLA
++            # writer (ops.concat_and_cache_mla -> concat_and_cache_nvfp4_mla,
++            # compiled into this image). The dense reader dequantizes records in
++            # the producer warp and requires a BF16 query, so mqa_q stays BF16.
++            cache = self.kv_cache
++            if cache.dtype != torch.uint8:
++                cache = cache.view(torch.uint8)
++            q_pe = q_pe.contiguous()
++            k_pe_flat = k_pe.reshape(k_pe.shape[0], -1).contiguous()
++            # use_rope=False (this model's NoPE fast path) leaves both RoPE
++            # inputs None for every step, not just dummy runs; the fused
++            # bf16/fp8 epilogues treat that as "no RoPE", so this arm must too.
++            if positions is not None and cos_sin_cache is not None:
++                ops.rotary_embedding(
++                    positions,
++                    q_pe,
++                    k_pe_flat.unsqueeze(1),
++                    self.qk_rope_head_dim,
++                    cos_sin_cache,
++                    False,
++                )
++            ops.concat_and_cache_mla(
++                kv_c_normed,
++                k_pe_flat,
++                cache,
++                slot_mapping.flatten(),
++                kv_cache_dtype=self.kv_cache_dtype,
++                scale=self._k_scale,
++            )
++            return torch.cat((ql_nope, q_pe), dim=-1)
+         if is_quantized_kv_cache(self.kv_cache_dtype):
+             assert self.impl.supports_quant_query_input, (  # type: ignore[attr-defined]
+                 "Kimi-K3 fp8 KV cache decode requires a backend that accepts an "
+@@ -1331,6 +1365,20 @@
+                     batch_size=chunk.num_requests,
+                     seq_starts=chunk.starts,
+                 )
++            elif self.kv_cache_dtype == "nvfp4_ds_mla":
++                # The compiled gather has no 432-byte instantiation, so dequant
++                # in torch. Every input is in this rank's local shard
++                # coordinates (padded local row map + local block table), so the
++                # workspace rows are exactly this rank's interleaved KV.
++                _gather_dequant_nvfp4_ds_mla(
++                    src_cache=kv_cache,
++                    dst=workspace,
++                    block_table=block_table,
++                    cu_seq_lens=chunk.padded_local_cu_seq_lens,
++                    token_to_seq=chunk.padded_local_token_to_seq,
++                    num_tokens=toks,
++                    seq_starts=chunk.starts,
++                )
+             elif is_quantized_kv_cache(self.kv_cache_dtype):
+                 ops.gather_and_maybe_dequant_cache(
+                     src_cache=kv_cache,
+@@ -1369,6 +1417,18 @@
+                 batch_size=chunk.num_requests,
+                 seq_starts=chunk.starts,
+             )
++        elif self.kv_cache_dtype == "nvfp4_ds_mla":
++            # Correctness-first torch dequant gather for 432-byte records; the
++            # decode hot path never reaches this.
++            _gather_dequant_nvfp4_ds_mla(
++                src_cache=kv_cache,
++                dst=workspace,
++                block_table=block_table,
++                cu_seq_lens=chunk.cu_seq_lens,
++                token_to_seq=chunk.token_to_seq,
++                num_tokens=toks,
++                seq_starts=chunk.starts,
++            )
+         elif not fp8_prefill:
+             ops.gather_and_maybe_dequant_cache(
+                 src_cache=kv_cache,
+@@ -1447,6 +1507,38 @@
+                 positions,
+                 cos_sin_cache,
+             )
++        elif self.kv_cache_dtype == "nvfp4_ds_mla":
++            # 432-byte packed NVFP4 records: BF16 prefill query, torch RoPE on
++            # the 64-dim rope halves, then the dedicated NVFP4 MLA writer.
++            assert not fp8_prefill, (
++                "Kimi-K3 nvfp4_ds_mla uses a bf16 prefill query; the dense "
++                "NVFP4 reader dequantizes KV and does not accept a quantized "
++                "query."
++            )
++            kv_cache = self.kv_cache
++            if kv_cache.dtype != torch.uint8:
++                kv_cache = kv_cache.view(torch.uint8)
++            q_pe = q[..., self.qk_nope_head_dim :].contiguous()
++            k_pe_flat = k_pe.reshape(k_pe.shape[0], -1).contiguous()
++            if positions is not None and cos_sin_cache is not None:
++                ops.rotary_embedding(
++                    positions,
++                    q_pe,
++                    k_pe_flat.unsqueeze(1),
++                    self.qk_rope_head_dim,
++                    cos_sin_cache,
++                    False,
++                )
++                q = torch.cat((q[..., : self.qk_nope_head_dim], q_pe), dim=-1)
++            k = fused_mla_kv_concat(k_nope, k_pe_flat)
++            ops.concat_and_cache_mla(
++                kv_c_normed,
++                k_pe_flat,
++                kv_cache,
++                slot_mapping.flatten(),
++                kv_cache_dtype=self.kv_cache_dtype,
++                scale=self._k_scale,
++            )
+         elif is_quantized_kv_cache(self.kv_cache_dtype):
+             if fp8_prefill:
+                 # Plain per-tensor FP8: quantize q/k/v unscaled and write the
+--- /tmp/kvfp4/pristine_b12x_mla.py	2026-10-01 01:43:57.249058172 +0000
++++ /data/models/k3-run/overlay-vllm-l3/b12x_mla.py	2026-10-01 01:29:05.998918728 +0000
+@@ -80,11 +80,25 @@
+                 f"this platform selected {fp8_dtype}."
+             )
+         return fp8_dtype
++    if cache_dtype == "nvfp4_ds_mla":
++        # 432-byte packed NVFP4 records held in a uint8 cache; the dense
++        # producer warp dequantizes them to BF16 SMEM tiles before the math
++        # pipeline, so the kernel never sees an FP4 operand.
++        return torch.uint8
+     raise ValueError(
+-        f"B12X_MLA supports only BF16 or E4M3 KV cache storage, got {cache_dtype!r}."
++        "B12X_MLA supports only BF16, E4M3, or NVFP4 KV cache storage, got "
++        f"{cache_dtype!r}."
+     )
+ 
+ 
++def _planned_dense_q_dtype(vllm_config: VllmConfig) -> torch.dtype:
++    """Query dtype the dense B12X kernel stages for this KV cache dtype."""
++    if vllm_config.cache_config.cache_dtype in ("fp8", "fp8_e4m3"):
++        return _planned_kv_dtype(vllm_config)
++    # nvfp4_ds_mla keeps the BF16 query; only the KV producer dequantizes.
++    return torch.bfloat16
++
++
+ def _max_dcp_local_cache_tokens(
+     vllm_config: VllmConfig, *, dcp_size: int | None = None
+ ) -> int:
+@@ -240,6 +254,14 @@
+             f"{_MAX_B12X_CACHE_TOKENS} cache tokens, got {max_cache_tokens}."
+         )
+ 
++    nvfp4_caps_kwargs: dict[str, Any] = {}
++    if vllm_config.cache_config.cache_dtype == "nvfp4_ds_mla":
++        # Pass the NVFP4 Caps fields only when they are needed: a b12x build
++        # without the dense NVFP4 reader has no such keywords, and the
++        # BF16/FP8 lanes must keep constructing Caps exactly as before.
++        nvfp4_caps_kwargs = {
++            "kv_format": "nvfp4_ds_mla",
++        }
+     caps = dense_mla.Caps(
+         device=device,
+         mode=mode,
+@@ -259,6 +281,7 @@
+         sparse_sink_chunks=sparse_sink_chunks,
+         sparse_recent_chunks=sparse_recent_chunks,
+         sparse_refresh_interval=sparse_refresh_interval,
++        **nvfp4_caps_kwargs,
+     )
+     return dense_mla.plan(caps)
+ 
+@@ -383,7 +406,7 @@
+         if self._kernel_heads != self.num_heads:
+             self._dense_mla_padded_q = torch.empty(
+                 (max_dense_mla_rows, self._kernel_heads, _K3_ABSORBED_HEAD_DIM),
+-                dtype=_planned_kv_dtype(vllm_config),
++                dtype=_planned_dense_q_dtype(vllm_config),
+                 device=device,
+             )
+             self._dense_mla_padded_output = torch.empty(
+@@ -603,6 +626,7 @@
+         "bfloat16",
+         "fp8",
+         "fp8_e4m3",
++        "nvfp4_ds_mla",
+     ]
+ 
+     @classmethod
+@@ -610,6 +634,22 @@
+         return [576]
+ 
+     @staticmethod
++    def get_kv_cache_shape(
++        num_blocks: int,
++        block_size: int,
++        num_kv_heads: int,  # assumed to be 1 for MLA
++        head_size: int,
++        cache_dtype_str: str = "auto",
++    ) -> tuple[int, ...]:
++        if cache_dtype_str == "nvfp4_ds_mla":
++            # Packed 432-byte record: [0,256) E2M1 latent, [256,288) E4M3
++            # group-16 scales, [288,304) pad, [304,432) BF16 RoPE. The dense
++            # reader asserts this inner shape, and MLAAttentionSpec already
++            # accounts block_size*432 bytes per page.
++            return (num_blocks, block_size, 432)
++        return (num_blocks, block_size, head_size)
++
++    @staticmethod
+     def get_supported_kernel_block_sizes() -> list[int | MultipleOf]:
+         return [MultipleOf(16)]
+ 
+@@ -756,6 +796,11 @@
+             raise NotImplementedError("B12xMLAImpl supports decoder attention only.")
+         if num_kv_heads != 1:
+             raise ValueError(f"B12xMLAImpl requires one KV head, got {num_kv_heads}.")
++        if kv_cache_dtype == "nvfp4_ds_mla":
++            # The dense NVFP4 reader consumes a BF16 query, and the FP8 prefill
++            # path cannot read 432-byte records, so chunked-prefill context
++            # takes the torch dequant gather in the layer instead.
++            self.supports_quant_query_input = False
+ 
+         actual_dims = (
+             head_size,
+--- /tmp/kvfp4/pristine_mla_attention.py	2026-10-01 01:43:57.801061604 +0000
++++ /data/models/k3-run/overlay-vllm-l3/mla_attention.py	2026-10-01 00:26:34.302017871 +0000
+@@ -635,6 +635,83 @@
+     return weight_dtype
+ 
+ 
++# E2M1 decode table (index = 4-bit code: sign exp1 exp0 mantissa).
++_NVFP4_E2M1_LUT = torch.tensor(
++    [
++        (+1.0 if s == 0 else -1.0)
++        * (m * 0.5 if e == 0 else (1.0 + m * 0.5) * float(2 ** (e - 1)))
++        for s in (0, 1)
++        for e in (0, 1, 2, 3)
++        for m in (0, 1)
++    ],
++    dtype=torch.float32,
++)
++
++
++def _gather_dequant_nvfp4_ds_mla(
++    *,
++    src_cache: torch.Tensor,
++    dst: torch.Tensor,
++    block_table: torch.Tensor,
++    cu_seq_lens: torch.Tensor,
++    token_to_seq: torch.Tensor,
++    num_tokens: int,
++    seq_starts: torch.Tensor,
++) -> None:
++    """Correctness-first chunked-context gather for 432-byte NVFP4 records.
++
++    The compiled gather_and_maybe_dequant_cache kernel has no 432-byte
++    instantiation in this image, so prefill-with-context dequantizes in torch
++    instead. Decode (the hot path) never goes through here.
++
++    ``dst`` is BF16 ``[rows, kv_lora_rank + qk_rope_head_dim]``; the writer
++    quantizes with outer scale 1.0, so no latent scale is applied here.
++
++    Works for both the replicated and the decode-context-parallel context
++    gather: the caller passes the row->sequence map and the per-sequence start
++    in the same coordinate space as ``block_table``. Under DCP those are the
++    rank-local ones (``padded_local_cu_seq_lens``,
++    ``padded_local_token_to_seq``, ``chunk.starts`` == padded local starts and
++    the rank-local block table), so ``token_pos`` below is a local row offset
++    and indexes the local table exactly like
++    ``cp_gather_and_upconvert_fp8_kv_cache`` does for fp8_ds_mla.
++    """
++    toks = int(num_tokens)
++    if toks == 0:
++        return
++    if src_cache.ndim == 4:
++        assert src_cache.shape[2] == 1
++        src_cache = src_cache[:, :, 0, :]
++    assert src_cache.shape[-1] == 432, (
++        f"nvfp4_ds_mla expects 432-byte KV records, got {src_cache.shape[-1]}"
++    )
++    block_size = int(src_cache.shape[1])
++    records = src_cache.reshape(-1, 432)
++
++    seq = token_to_seq[:toks].to(device=dst.device, dtype=torch.long)
++    starts = seq_starts.to(device=dst.device, dtype=torch.long)
++    cu = cu_seq_lens.to(device=dst.device, dtype=torch.long)
++    # Position of output row t inside its sequence: chunk-local offset
++    # (t - cu_seq_lens[seq]) plus the sequence's context start.
++    token_pos = torch.arange(toks, device=dst.device) - cu[seq] + starts[seq]
++    pages = block_table.to(dst.device)[
++        seq, torch.div(token_pos, block_size, rounding_mode="floor")
++    ].to(torch.long)
++    rec = records[pages * block_size + token_pos % block_size]  # [toks,432] u8
++
++    packed = rec[:, :256]
++    codes = torch.stack((packed & 0xF, packed >> 4), dim=2).reshape(toks, 512)
++    lut = _NVFP4_E2M1_LUT.to(dst.device)
++    nope = lut[codes.long()]  # [toks, 512] f32
++    scales = (
++        rec[:, 256:288].contiguous().view(torch.float8_e4m3fn).to(torch.float32)
++    )  # [toks, 32]
++    nope = nope * scales.repeat_interleave(16, dim=1)
++    rope = rec[:, 304:432].contiguous().view(torch.bfloat16)
++    dst[:toks, :512] = nope.to(torch.bfloat16)
++    dst[:toks, 512:576] = rope
++
++
+ class MLAAttention(nn.Module, AttentionLayerBase):
+     """Multi-Head Latent Attention layer.
+ 
+@@ -3303,7 +3380,10 @@
+             self.determine_chunked_prefill_workspace_size(vllm_config)
+         )
+ 
+-        use_packed_fp8_cache = vllm_config.cache_config.cache_dtype == "fp8_ds_mla"
++        use_packed_fp8_cache = vllm_config.cache_config.cache_dtype in (
++            "fp8_ds_mla",
++            "nvfp4_ds_mla",
++        )
+         self.dcp_manager: MLADCPKVGather | None = None
+         if self.dcp_world_size > 1:
+             assert self.chunked_prefill_workspace_size % self.dcp_world_size == 0
+@@ -3852,6 +3932,18 @@
+                     batch_size=chunk.num_requests,
+                     seq_starts=chunk.starts,
+                 )
++            elif self.kv_cache_dtype == "nvfp4_ds_mla":
++                # The compiled gather kernel has no 432-byte instantiation in
++                # this image; dequant in torch (decode never uses this path).
++                _gather_dequant_nvfp4_ds_mla(
++                    src_cache=kv_c_and_k_pe_cache,
++                    dst=workspace,
++                    block_table=block_table,
++                    cu_seq_lens=chunk.cu_seq_lens,
++                    token_to_seq=chunk.token_to_seq,
++                    num_tokens=toks,
++                    seq_starts=chunk.starts,
++                )
+             elif not use_fp8_prefill:
+                 ops.gather_and_maybe_dequant_cache(
+                     src_cache=kv_c_and_k_pe_cache,
+@@ -3960,6 +4052,20 @@
+                     batch_size=chunk.num_requests,
+                     seq_starts=chunk.starts,
+                 )
++            elif self.kv_cache_dtype == "nvfp4_ds_mla":
++                # DCP: same torch dequant gather, but every input is in this
++                # rank's local shard coordinates -- the padded local row map
++                # and the local block table -- so the gathered rows are this
++                # rank's interleaved KV, matching the fp8_ds_mla branch above.
++                _gather_dequant_nvfp4_ds_mla(
++                    src_cache=kv_c_and_k_pe_cache,
++                    dst=workspace,
++                    block_table=block_table,
++                    cu_seq_lens=padded_local_cu_seq_lens,
++                    token_to_seq=chunk.padded_local_token_to_seq,
++                    num_tokens=toks,
++                    seq_starts=chunk.starts,
++                )
+             elif is_quantized_kv_cache(self.kv_cache_dtype):
+                 assert k_scale is not None
+                 ops.gather_and_maybe_dequant_cache(

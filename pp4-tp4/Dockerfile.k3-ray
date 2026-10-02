@@ -1,0 +1,6 @@
+# Derived image: pinned r38 runtime + Ray 2.58.0 (multi-node executor support).
+# IMMUTABILITY BREAK — recorded in run receipt. All model/serving bits remain
+# byte-identical to the pinned base; only Ray and its Python deps are added.
+FROM voipmonitor/vllm@sha256:32ff80279164365b21cdb420d7a22101be704df42b66db2c17d64d5e0558f240
+
+RUN /opt/venv/bin/pip install --no-cache-dir "ray[default]==2.58.0"

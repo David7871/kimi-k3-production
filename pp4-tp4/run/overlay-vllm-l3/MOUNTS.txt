@@ -1,0 +1,25 @@
+# overlay-vllm-l3 single-file vLLM mounts for image kimi-k3-up-ray:local.
+# Format: <overlay-file-name> -> <dest relative to site-packages>
+# Dest root: /opt/venv/lib/python3.12/site-packages
+# Bind each line read-only (-v ...:ro). Append-only; do not reorder.
+gpu_model_runner.py -> vllm/v1/worker/gpu_model_runner.py
+dcp_utils.py -> vllm/v1/attention/ops/dcp_utils.py
+envs.py -> vllm/envs.py
+linear.py -> vllm/model_executor/layers/linear.py
+moe_runner.py -> vllm/model_executor/layers/fused_moe/runner/moe_runner.py
+model.py -> vllm/models/kimi_k3/nvidia/model.py
+l2_prefetch.py -> vllm/models/kimi_k3/nvidia/l2_prefetch.py
+l2_cache_hints.py -> vllm/models/kimi_k3/nvidia/l2_cache_hints.py
+fused_topk_bias_router.py -> vllm/model_executor/layers/fused_moe/router/fused_topk_bias_router.py
+scheduler.py -> vllm/v1/core/sched/scheduler.py
+pp_utils.py -> vllm/v1/worker/gpu/pp_utils.py
+parallel_state.py -> vllm/distributed/parallel_state.py
+ray_executor_v2.py -> vllm/v1/executor/ray_executor_v2.py
+b12x_smcap.py -> b12x_smcap.py
+b12x_smcap.pth -> b12x_smcap.pth
+common.py -> vllm/v1/attention/ops/common.py
+dcp_alltoall.py -> vllm/v1/attention/ops/dcp_alltoall.py
+mla_attention.py -> vllm/model_executor/layers/attention/mla_attention.py
+b12x_mla.py -> vllm/v1/attention/backends/mla/b12x_mla.py
+k3_nvidia_mla.py -> vllm/models/kimi_k3/nvidia/mla.py
+vllm_config.py -> vllm/config/vllm.py

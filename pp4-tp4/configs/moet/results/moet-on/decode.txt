@@ -1,0 +1,2 @@
+C16 decode=374.4 per_req=23.4
+C16 decode=371.8 per_req=23.2

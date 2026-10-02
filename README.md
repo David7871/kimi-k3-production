@@ -71,6 +71,20 @@ including the isolated cache namespace and CPU pinning default, are documented.
 A 16-GPU installation needs its own launch/topology choices; the source and
 binary snapshot can be inspected independently of this TP9 recipe.
 
+
+## PP4×TP4 two-host lane (16 GPUs, no speculative decoding)
+
+[pp4-tp4/](pp4-tp4/) documents a second, measured (not production-qualified)
+serving topology: pipeline parallel 4 × tensor parallel 4 (with MLA
+decode-context parallel 4) across two 8-GPU hosts — no DFlash, no MTP, no
+draft model — plus the optional **Moet 2-bit routed-expert** path. It ships
+the exact vLLM/b12x overlay trees, launchers, env files, image recipes, and
+raw benchmark output. Headline: 372 tok/s at C16 (+11.1%) and 1394 tok/s at
+C256 (+9.9%) with Moet on vs the same-image control, GSM8K-200 197/200 OFF vs
+196/200 ON, and an optional PP layer rebalance that adds +16.7% KV-cache
+capacity at a C16/C256 cost (360/1341 tok/s). See
+[pp4-tp4/README.md](pp4-tp4/README.md).
+
 ## Historical files and attribution
 
 `compose/`, `candidates/`, `overlays/`, `bin/`, and older build directories are

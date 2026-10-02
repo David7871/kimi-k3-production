@@ -1,0 +1,8 @@
+FROM kimi-k3-up-ray:local
+# K3-Moet MVP: Moet 2-bit moe_w2_mm routed-expert path behind VLLM_K3_MOET=1.
+# Patched quant config + Moet runtime modules into the venv site-packages
+# (the lane bind-mounts do not shadow these paths), cubins at /opt/moet/cubins.
+COPY payload/vllm/model_executor/layers/quantization/kquant_hybrid.py   /opt/venv/lib/python3.12/site-packages/vllm/model_executor/layers/quantization/kquant_hybrid.py
+COPY payload/vllm/model_executor/layers/quantization/utils/   /opt/venv/lib/python3.12/site-packages/vllm/model_executor/layers/quantization/utils/
+COPY payload/cubins/ /opt/moet/cubins/
+LABEL dev.mydatacenter.k3.moet-mvp="k3-moet-mvp-20261001"

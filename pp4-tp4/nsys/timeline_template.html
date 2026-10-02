@@ -1,0 +1,84 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>K3 PP4xTP4 timeline</title>
+<style>
+body{margin:0;font:12px system-ui,sans-serif;background:#fff;color:#222}
+.bar{padding:6px 10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bar button{font:12px system-ui;padding:2px 8px}
+#legend span{display:inline-flex;align-items:center;margin-right:10px}
+#legend i{width:12px;height:12px;display:inline-block;margin-right:4px}
+canvas{display:block}
+#tip{position:fixed;pointer-events:none;background:#222;color:#fff;padding:4px 6px;border-radius:3px;display:none;white-space:pre}
+#scroll{width:calc(100% - 20px);margin:4px 10px}
+#help{color:#666}
+</style></head><body>
+<div class="bar" style="border-bottom:1px solid #ddd"><b id="ttl"></b><span id="info"></span>
+<span>window:</span><button data-w="40">40 ms</button><button data-w="160">160 ms</button><button data-w="640">640 ms</button><button data-w="2000">2 s</button><button data-w="0">all</button>
+<span id="help">drag = pan, wheel = zoom, shift+wheel / slider = scroll. Zoomed out: each pixel shows its dominant category, white = idle more than half the pixel.</span></div>
+<div class="bar"><span id="legend"></span></div>
+<input id="scroll" type="range" min="0" max="1000" value="0">
+<canvas id="cv"></canvas><div id="tip"></div>
+<script>
+/*DATA*/
+const dec=(b,T)=>{const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return new T(u.buffer)};
+for(const r of ROWS)for(const k of ["main","wait"]){const L=r[k];L.s=dec(L.s,Int32Array);L.d=dec(L.d,Int32Array);L.c=dec(L.c,Uint8Array);L.n=dec(L.n,Uint16Array);
+  L.mx=0;for(let i=0;i<L.d.length;i++)if(L.d[i]>L.mx)L.mx=L.d[i];}
+const SPAN=META.span_ms, LABW=150, ROWH=30, TOP=26, NC=META.cats.length;
+const cv=document.getElementById("cv"), ctx=cv.getContext("2d"), tip=document.getElementById("tip");
+document.getElementById("ttl").textContent=META.title;
+document.getElementById("info").textContent=`t0 = ${META.t0} UTC, span ${SPAN.toFixed(0)} ms, rtx-02 clock shifted ${META.offset_ms.toFixed(3)} ms`;
+document.getElementById("legend").innerHTML=META.cats.map((c,i)=>`<span><i style="background:${META.colors[i]}"></i>${c}</span>`).join("")+'<span><i style="background:#fff;border:1px solid #999"></i>idle</span>';
+let v0=0, w=Math.min(640,SPAN);
+const H=TOP+ROWS.length*ROWH+10;
+const plotW=()=>innerWidth-LABW-10;
+function size(){cv.width=innerWidth*devicePixelRatio;cv.height=H*devicePixelRatio;cv.style.width=innerWidth+"px";cv.style.height=H+"px";draw();}
+function lb(a,x){let l=0,h=a.length;while(l<h){const m=(l+h)>>1;if(a[m]<x)l=m+1;else h=m;}return l;}
+function drawLane(L,yy,h,W,k){
+  const WP=Math.ceil(W), acc=new Float32Array(WP*NC), b=(v0+w)*1e4;
+  for(let i=lb(L.s,v0*1e4-L.mx);i<L.s.length&&L.s[i]<=b;i++){
+    const s=L.s[i]/1e4, e=s+L.d[i]/1e4; if(e<v0)continue;
+    const x0=Math.max(0,(s-v0)*k), x1=Math.min(W,(e-v0)*k), c=L.c[i];
+    for(let px=x0|0;px<x1&&px<WP;px++){const ov=Math.min(x1,px+1)-Math.max(x0,px);if(ov>0)acc[px*NC+c]+=ov;}
+  }
+  let runC=-1,runX=0;
+  for(let px=0;px<=WP;px++){
+    let col=-1;
+    if(px<WP){let bv=0,tot=0;for(let c=0;c<NC;c++){const v=acc[px*NC+c];tot+=v;if(v>bv){bv=v;col=c;}}if(tot<0.5)col=-1;}
+    if(col!==runC){if(runC>=0){ctx.fillStyle=META.colors[runC];ctx.fillRect(LABW+runX,yy,px-runX,h);}runC=col;runX=px;}
+  }
+}
+function draw(){
+  const dpr=devicePixelRatio, W=plotW(); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,innerWidth,H);
+  v0=Math.max(0,Math.min(v0,SPAN-w)); const k=W/w;
+  const steps=[0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000]; const st=steps.find(s=>W/(w/s)>=70)||1000;
+  ctx.font="11px system-ui"; ctx.strokeStyle="#eee";
+  for(let t=Math.ceil(v0/st)*st;t<=v0+w;t+=st){const x=LABW+(t-v0)*k;ctx.beginPath();ctx.moveTo(x,TOP-4);ctx.lineTo(x,H);ctx.stroke();ctx.fillStyle="#444";ctx.fillText((st<1?t.toFixed(1):t.toFixed(0))+" ms",x+2,TOP-8);}
+  ROWS.forEach((r,ri)=>{
+    const y=TOP+ri*ROWH; ctx.fillStyle="#222"; ctx.fillText(r.label,4,y+ROWH/2+4);
+    if(ri>0&&ROWS[ri-1].stage!=r.stage){ctx.strokeStyle="#000";ctx.beginPath();ctx.moveTo(0,y-1);ctx.lineTo(innerWidth,y-1);ctx.stroke();ctx.strokeStyle="#eee";}
+    drawLane(r.wait,y+ROWH*0.35,ROWH*0.3,W,k);
+    drawLane(r.main,y+ROWH*0.1,ROWH*0.8,W,k);
+  });
+  document.getElementById("scroll").value=Math.round(1000*v0/Math.max(1e-9,SPAN-w));
+}
+function hit(mx,my){
+  const W=plotW(), ri=Math.floor((my-TOP)/ROWH); if(ri<0||ri>=ROWS.length||mx<LABW)return null;
+  const t=v0+(mx-LABW)*w/W, r=ROWS[ri], tol=2*w/W;
+  for(const ln of ["main","wait"]){const L=r[ln];
+    for(let i=lb(L.s,(t-tol)*1e4-L.mx);i<L.s.length&&L.s[i]<=(t+tol)*1e4;i++){const s=L.s[i]/1e4,e=s+L.d[i]/1e4;
+      if(s-tol<=t&&t<=e+tol)return `${r.label}\n${META.cats[L.c[i]]}${L.n[i]>1?` (${L.n[i]} kernels merged)`:""}\nstart ${s.toFixed(3)} ms  dur ${(e-s).toFixed(3)} ms`;}}
+  return `${r.label}\nidle at ${t.toFixed(3)} ms`;
+}
+let drag=null;
+cv.onmousedown=e=>drag={x:e.clientX,v:v0};
+onmouseup=()=>drag=null;
+onmousemove=e=>{
+  if(drag){v0=drag.v-(e.clientX-drag.x)*w/plotW();draw();tip.style.display="none";return;}
+  const r=cv.getBoundingClientRect(), s=(e.target==cv)?hit(e.clientX-r.left,e.clientY-r.top):null;
+  if(s){tip.textContent=s;tip.style.display="block";tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+12)+"px";}else tip.style.display="none";};
+cv.onwheel=e=>{e.preventDefault();const W=plotW(),r=cv.getBoundingClientRect();
+  if(e.shiftKey||Math.abs(e.deltaX)>Math.abs(e.deltaY)){v0+=(e.deltaX||e.deltaY)*w/W;draw();return;}
+  const mx=e.clientX-r.left-LABW, t=v0+mx*w/W; w=Math.max(0.05,Math.min(SPAN,w*Math.exp(e.deltaY*0.002))); v0=t-mx*w/W; draw();};
+document.getElementById("scroll").oninput=e=>{v0=(SPAN-w)*e.target.value/1000;draw();};
+document.querySelectorAll("button[data-w]").forEach(b=>b.onclick=()=>{const c=v0+w/2;w=Math.min(+b.dataset.w||SPAN,SPAN);v0=c-w/2;draw();});
+onresize=size; size();
+</script></body></html>

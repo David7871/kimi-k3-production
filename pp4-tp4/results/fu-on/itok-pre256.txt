@@ -1,0 +1,16 @@
+vllm:iteration_tokens_total_bucket{engine="0",le="1.0",model_name="Kimi-K3-QSRT-K2"} 1555.0
+vllm:iteration_tokens_total_bucket{engine="0",le="8.0",model_name="Kimi-K3-QSRT-K2"} 12263.0
+vllm:iteration_tokens_total_bucket{engine="0",le="16.0",model_name="Kimi-K3-QSRT-K2"} 12270.0
+vllm:iteration_tokens_total_bucket{engine="0",le="32.0",model_name="Kimi-K3-QSRT-K2"} 12274.0
+vllm:iteration_tokens_total_bucket{engine="0",le="64.0",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_bucket{engine="0",le="128.0",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_bucket{engine="0",le="256.0",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_bucket{engine="0",le="512.0",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_bucket{engine="0",le="1024.0",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_bucket{engine="0",le="2048.0",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_bucket{engine="0",le="4096.0",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_bucket{engine="0",le="8192.0",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_bucket{engine="0",le="16384.0",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_bucket{engine="0",le="+Inf",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_count{engine="0",model_name="Kimi-K3-QSRT-K2"} 12275.0
+vllm:iteration_tokens_total_sum{engine="0",model_name="Kimi-K3-QSRT-K2"} 44629.0
